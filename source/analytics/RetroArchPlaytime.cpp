@@ -135,6 +135,9 @@ std::string inferSystemIdFromDbName(const std::string& dbName)
         return "nds";
     if (n.find("3ds") != std::string::npos)
         return "3ds";
+    if (n.find("sega cd") != std::string::npos || n.find("mega-cd") != std::string::npos
+        || n.find("mega cd") != std::string::npos || n.find("megacd") != std::string::npos)
+        return "segacd";
     if (n.find("mega drive") != std::string::npos || n.find("genesis") != std::string::npos)
         return "megadrive";
     if (n.find("master system") != std::string::npos)
@@ -234,7 +237,7 @@ int defaultReleaseYearForSystem(const std::string& systemId)
     static const std::unordered_map<std::string, int> kYears = {
         {"atari2600", 1977}, {"atari5200", 1982}, {"atari7800", 1986}, {"atarist", 1985},
         {"atarilynx", 1989}, {"atarijaguar", 1993}, {"nes", 1985}, {"mastersystem", 1986},
-        {"gb", 1989}, {"snes", 1991}, {"megadrive", 1989}, {"gamegear", 1991}, {"gbc", 1998},
+        {"gb", 1989}, {"snes", 1991}, {"megadrive", 1989}, {"segacd", 1991}, {"gamegear", 1991}, {"gbc", 1998},
         {"pce", 1987}, {"neogeo", 1990}, {"cps1", 1988}, {"cps2", 1993}, {"n64", 1996},
         {"psx", 1995}, {"saturn", 1995}, {"gba", 2001}, {"nds", 2004},
         {"dreamcast", 1999}, {"psp", 2005}, {"gc", 2001}, {"wii", 2006}, {"3ds", 2011},

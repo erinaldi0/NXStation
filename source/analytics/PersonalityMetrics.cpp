@@ -41,7 +41,8 @@ PlayBucket classifyBucket(const GamePlayLog& g)
         return PlayBucket::Arcade;
 
     const std::string id = g.systemId;
-    if (id == "snes" || id == "megadrive" || id == "pce" || id == "gamegear" || id == "neogeo")
+    if (id == "snes" || id == "megadrive" || id == "segacd" || id == "pce" || id == "gamegear"
+        || id == "neogeo")
         return PlayBucket::SixteenBit;
     if (id == "nes" || id == "mastersystem" || id == "gb" || id == "gbc" || id == "atari7800"
         || id == "atari2600" || id == "atari5200")
@@ -71,8 +72,9 @@ Era classifyEra(const GamePlayLog& g)
         return Era::Gen70s;
     if (id == "nes" || id == "mastersystem" || id == "atari7800" || id == "atari5200")
         return Era::Gen80s;
-    if (id == "snes" || id == "megadrive" || id == "psx" || id == "n64" || id == "saturn" || id == "gb"
-        || id == "gbc" || id == "pce" || id == "neogeo" || id == "cps1" || id == "cps2")
+    if (id == "snes" || id == "megadrive" || id == "segacd" || id == "psx" || id == "n64"
+        || id == "saturn" || id == "gb" || id == "gbc" || id == "pce" || id == "neogeo"
+        || id == "cps1" || id == "cps2")
         return Era::Gen90s;
     if (id == "dreamcast" || id == "gba" || id == "psp" || id == "nds" || id == "gc" || id == "wii"
         || id == "3ds")

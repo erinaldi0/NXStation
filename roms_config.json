@@ -282,6 +282,21 @@
       "ssSystemId": 1
     },
     {
+      "id": "segacd",
+      "name": "Sega Mega CD",
+      "path": "sdmc:/roms/segacd",
+      "core": "sdmc:/retroarch/cores/genesis_plus_gx_libretro_libnx.nro",
+      "extensions": [
+        ".cue",
+        ".chd",
+        ".iso",
+        ".bin",
+        ".m3u",
+        ".ccd"
+      ],
+      "ssSystemId": 20
+    },
+    {
       "id": "saturn",
       "name": "Sega Saturn",
       "path": "sdmc:/roms/saturn",

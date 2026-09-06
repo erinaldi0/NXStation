@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **Scrape Library** on the systems Y menu — batch scrape every real system (no single-game option).
+- **Scrape Library** on the systems Y menu: batch scrape every real system (no single-game option).
 - **Minus** starts the screensaver from the system carousel, system list, and game list.
 - Screensaver **keeps the screen awake for 30 minutes**, then allows the OS sleep timer again.
 

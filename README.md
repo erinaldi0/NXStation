@@ -2,7 +2,7 @@
 
 Lightweight Nintendo Switch homebrew frontend for browsing ROM libraries, scraping box art / metadata / video previews / PDF manuals, and chain-loading RetroArch or standalone cores via `envSetNextLoad()`.
 
-**Current version:** 1.1.0 — see [`changelog.md`](changelog.md).
+**Current version:** 1.1.1. See [`changelog.md`](changelog.md).
 
 **Docs:** [Wiki](https://nxstation.com/wiki.html) · [Blog](https://nxstation.com/blog.html) · [GitHub Releases](https://github.com/jiraiya78/NXStation/releases)
 
@@ -33,7 +33,7 @@ Horizon constraints from the spec are enforced:
 1. In-app: Settings → **Check for Updates** (needs internet). Downloads `NXStation.nro` from the latest GitHub Release asset and replaces `sdmc:/switch/NXStation/NXStation.nro`. Restart afterward.
 2. Manual: copy a new `NXStation.nro` over the same path. Settings and data are kept.
 
-Release publishers must attach an asset named exactly **`NXStation.nro`** and use a semver tag (`v1.1.0`).
+Release publishers must attach an asset named exactly **`NXStation.nro`** and use a semver tag (`v1.1.1`).
 
 ## Repository layout
 
@@ -117,7 +117,7 @@ sdmc:/roms/{nes,snes,n64,gba,...}/
 sdmc:/roms/{systemId}/manuals/{stem}-manual.pdf  ← scraped PDF manuals
 ```
 
-Default systems (28) include Atari family, Nintendo through Wii/3DS, Sega through Saturn/Dreamcast, arcade (CPS1/2, Neo Geo, FBNeo), PSX, PSP, and PC Engine. **PS2** remains omitted (no practical Switch RetroArch core).
+Default systems (30) include Atari, Nintendo through Wii/3DS, Sega, arcade (CPS1/2, Neo Geo, FBNeo), PSX, PSP, PC Engine, and ZX Spectrum. **PS2** remains omitted (no practical Switch RetroArch core).
 
 **GameCube / Wii / 3DS** need standalone [Tico](https://github.com/ticohq) cores downloaded to `cores/` and set in Settings → **Core Paths** — see the [wiki](https://nxstation.com/wiki.html#wiki-cores).
 

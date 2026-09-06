@@ -2,7 +2,7 @@
 
 Nintendo Switch homebrew ROM frontend (repo: `NXStation`). Borealis UI (xfangfang fork), RetroArch core-direct launch, ScreenScraper metadata, optional FFmpeg video previews.
 
-**Current version:** 1.1.0 (2026-09-06). See [`changelog.md`](changelog.md) and [`release_v1.1.0.md`](release_v1.1.0.md).
+**Current version:** 1.1.1 (2026-09-06). See [`changelog.md`](changelog.md).
 
 ## What it does
 
@@ -333,7 +333,7 @@ Settings → **Check for Updates**:
 3. Prefer release asset named exactly **`NXStation.nro`**
 4. Download to `NXStation.nro.tmp`, replace `paths::APP_NRO`, notify user to **restart**
 
-Release process: publish a GitHub Release with a semver tag (`v1.1.0`) and attach `NXStation.nro`. Without that asset name, the check reports an update but cannot install.
+Release process: publish a GitHub Release with a semver tag (`v1.1.1`) and attach `NXStation.nro`. Without that asset name, the check reports an update but cannot install.
 
 `Config::load` merges **new** bundled systems into an existing SD `roms_config.json` (does not overwrite user entries), and prunes retired IDs (currently `ps2`) from SD `roms_config.json` / `user_cores.json`.
 
@@ -428,7 +428,7 @@ Switch build: **no** `STB_IMAGE_IMPLEMENTATION` in `TextureCache.cpp`.
 
 ## Supported systems (roms_config.json)
 
-Default systems (28): `atari2600`, `atari5200`, `atari7800`, `atarilynx`, `atarijaguar`, `atarist`, `nes`, `snes`, `n64`, `gba`, `gb`, `gbc`, `nds`, `3ds`, `gc`, `wii`, `megadrive`, `mastersystem`, `gamegear`, `saturn`, `dreamcast`, `cps1`, `cps2`, `neogeo`, `arcade`, `psx`, `psp`, `pce`.
+Default systems (30): `atari2600`, `atari5200`, `atari7800`, `atarilynx`, `atarijaguar`, `atarist`, `nes`, `snes`, `n64`, `gba`, `gb`, `gbc`, `nds`, `3ds`, `gc`, `wii`, `megadrive`, `segacd`, `mastersystem`, `gamegear`, `saturn`, `dreamcast`, `cps1`, `cps2`, `neogeo`, `arcade`, `psx`, `psp`, `pce`, `zxspectrum`.
 
 Retired / pruned on load: **PS2** (no practical Switch RetroArch core).
 

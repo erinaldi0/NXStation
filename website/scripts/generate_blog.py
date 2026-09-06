@@ -290,7 +290,7 @@ def build_post(release: dict) -> None:
         f'<a class="btn btn--ghost" href="{html.escape(gh_href)}" target="_blank" rel="noopener noreferrer">{gh_label}</a>'
     )
     draft_note = (
-        '<p class="blog-post__draft-note">Documented here ahead of the GitHub release — check GitHub Releases for the downloadable NRO when it ships.</p>'
+        '<p class="blog-post__draft-note">This page is up before the GitHub release. Grab the NRO from GitHub Releases when it ships.</p>'
         if is_draft
         else ""
     )

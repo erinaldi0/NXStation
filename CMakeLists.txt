@@ -26,7 +26,7 @@ include(${BOREALIS_LIBRARY}/cmake/toolchain.cmake)
 project(NXStation)
 set(VERSION_MAJOR "1")
 set(VERSION_MINOR "1")
-set(VERSION_ALTER "0")
+set(VERSION_ALTER "1")
 set(VERSION_BUILD "0")
 
 # Generated header so the in-app "About" version always matches the build.

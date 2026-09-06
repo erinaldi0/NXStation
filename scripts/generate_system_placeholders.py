@@ -18,6 +18,7 @@ SYSTEMS = [
     ("gbc", "GBC", (72, 168, 168)),
     ("nds", "NDS", (52, 52, 64)),
     ("megadrive", "MEGADRIVE", (72, 120, 196)),
+    ("segacd", "MEGA CD", (56, 104, 176)),
     ("mastersystem", "MASTER SYSTEM", (52, 88, 148)),
     ("gamegear", "GAME GEAR", (96, 72, 148)),
     ("psx", "PSX", (88, 88, 140)),
@@ -112,10 +113,16 @@ def make_pixel_fn(accent, label):
 
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
+    wrote = 0
+    kept = 0
     for sid, label, accent in SYSTEMS:
         png_path = os.path.join(OUT_DIR, f"{sid}.png")
+        if os.path.isfile(png_path):
+            kept += 1
+            continue
         write_png(png_path, W, H, make_pixel_fn(accent, label))
-    print(f"wrote {len(SYSTEMS)} system placeholders to {OUT_DIR}")
+        wrote += 1
+    print(f"wrote {wrote} system placeholders ({kept} already present) to {OUT_DIR}")
 
 
 if __name__ == "__main__":

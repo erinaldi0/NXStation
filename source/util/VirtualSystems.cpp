@@ -56,6 +56,8 @@ std::string systemAcronym(const std::string& systemId)
         return "3DS";
     if (systemId == "megadrive" || systemId == "genesis")
         return "MEGADRIVE";
+    if (systemId == "segacd" || systemId == "megacd")
+        return "MEGACD";
     if (systemId == "mastersystem")
         return "SMS";
     if (systemId == "gamegear")

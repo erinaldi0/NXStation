@@ -13,7 +13,7 @@
     })();
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="NXStation Wiki — setup, controls, scraping, manuals, Tico cores, analytics, themes, and FAQs for Nintendo Switch homebrew users." />
+  <meta name="description" content="NXStation Wiki: setup, controls, scraping, manuals, Tico cores, analytics, themes, and FAQs." />
   <meta name="theme-color" content="#0C0612" />
   <title>Wiki · NXStation</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -64,8 +64,8 @@
       <p class="eyebrow">User guide</p>
       <h1>NXStation Wiki</h1>
       <p class="wiki-page__lead">
-        Everything you need to install, navigate, scrape media, read game manuals, use Tico cores, view analytics, and customize themes on your Switch.
-        Expand a section below to read the full guide.
+        Setup, controls, scraping, Tico cores, analytics, and themes.
+        Open a section below when you need it.
       </p>
 
       <nav class="wiki-toc glass" aria-label="Wiki sections">
@@ -92,7 +92,7 @@
           <div class="faq-item__panel" hidden>
             <h3>Title Override vs. Applet Mode</h3>
             <p>
-              <strong>Always launch NXStation via Title Override</strong> — hold <strong>R</strong> while opening any retail Switch game, then pick NXStation from the menu.
+              <strong>Always launch NXStation via Title Override.</strong> Hold <strong>R</strong> while opening any retail Switch game, then pick NXStation from the menu.
               This gives the app full RAM access for smooth video previews, PDF manuals, and media loading.
             </p>
             <p>
@@ -148,18 +148,18 @@
 
             <h3>Supported Systems</h3>
             <p>
-              NXStation ships with <strong>29 systems</strong> in the default <code>roms_config.json</code>, covering Atari, Nintendo, Sega, arcade, Sony, Sinclair, and PC Engine platforms:
+              NXStation ships with <strong>30 systems</strong> in the default <code>roms_config.json</code>, covering Atari, Nintendo, Sega, arcade, Sony, Sinclair, and PC Engine platforms:
             </p>
             <ul class="wiki-systems">
               <li><code>arcade</code>, <code>cps1</code>, <code>cps2</code>, <code>neogeo</code></li>
               <li><code>atari2600</code>, <code>atari5200</code>, <code>atari7800</code>, <code>atarilynx</code>, <code>atarijaguar</code>, <code>atarist</code></li>
               <li><code>nes</code>, <code>snes</code>, <code>n64</code>, <code>gb</code>, <code>gbc</code>, <code>gba</code>, <code>nds</code>, <code>3ds</code>, <code>gc</code>, <code>wii</code></li>
-              <li><code>mastersystem</code>, <code>gamegear</code>, <code>megadrive</code>, <code>saturn</code>, <code>dreamcast</code></li>
+              <li><code>mastersystem</code>, <code>gamegear</code>, <code>megadrive</code>, <code>segacd</code>, <code>saturn</code>, <code>dreamcast</code></li>
               <li><code>psx</code>, <code>psp</code>, <code>pce</code>, <code>zxspectrum</code></li>
             </ul>
             <p>You can add more systems by editing <code>roms_config.json</code> when a matching RetroArch core exists.</p>
             <aside class="wiki-callout wiki-callout--warn" role="note">
-              <strong>PlayStation 2 is not supported.</strong> PS2 emulation is not practical on Nintendo Switch hardware with current libretro cores. Do not expect a PS2 folder in the default config — focus on PS1 (<code>psx</code>) and PSP (<code>psp</code>) instead.
+              <strong>PlayStation 2 is not supported.</strong> PS2 is not practical on Switch with current libretro cores. There is no PS2 folder in the default config. Use PS1 (<code>psx</code>) and PSP (<code>psp</code>) instead.
             </aside>
             <aside class="wiki-callout" role="note">
               <strong>GameCube, Wii, and 3DS are experimental.</strong> These systems are listed in the default config because standalone <strong>Tico</strong> cores can produce playable results, but they are <em>not</em> bundled with NXStation. You must download the core <code>.nro</code> files yourself, place them in <code>sdmc:/switch/NXStation/cores/</code>, then point each system to the correct core in <strong>Settings → Core Paths</strong>. See <a href="#wiki-cores">Custom Standalone Cores</a> for download links and setup steps.
@@ -184,7 +184,8 @@
                   <tr><td><kbd>L</kbd> / <kbd>R</kbd> or <kbd>←</kbd> <kbd>→</kbd></td><td>Previous / next system</td></tr>
                   <tr><td><kbd>A</kbd></td><td>Open selected system’s game list</td></tr>
                   <tr><td><kbd>+</kbd></td><td>Open Settings</td></tr>
-                  <tr><td><kbd>Y</kbd></td><td>Main menu (search, jump to system, analytics)</td></tr>
+                  <tr><td><kbd>Y</kbd></td><td>Main menu: search, jump to system, scan, scrape library, analytics</td></tr>
+                  <tr><td><kbd>−</kbd> (Minus)</td><td>Start screensaver</td></tr>
                   <tr><td><kbd>B</kbd></td><td>Back / close popup</td></tr>
                 </tbody>
               </table>
@@ -200,6 +201,7 @@
                   <tr><td><kbd>A</kbd></td><td>Launch game (opens RetroArch core)</td></tr>
                   <tr><td><kbd>X</kbd></td><td>Toggle favorite (starred games sort to top)</td></tr>
                   <tr><td><kbd>Y</kbd></td><td>Game options / scrape menu</td></tr>
+                  <tr><td><kbd>−</kbd> (Minus)</td><td>Start screensaver</td></tr>
                   <tr><td><kbd>L</kbd> / <kbd>R</kbd></td><td>Page up / page down in long lists</td></tr>
                   <tr><td><kbd>R₃</kbd> (right stick press)</td><td>Random game</td></tr>
                   <tr><td><kbd>B</kbd></td><td>Return to system carousel</td></tr>
@@ -238,8 +240,11 @@
             </div>
 
             <aside class="wiki-callout" role="note">
-              <strong>Exiting the app:</strong> The <kbd>−</kbd> (Minus) button does <em>not</em> quit NXStation. Press the Switch <strong>Home</strong> button to leave the app. Your library position is saved and restored when you return.
+              <strong>Screensaver:</strong> Press <kbd>−</kbd> (Minus) on the carousel, system list, or game list. It also starts after the idle delay in Settings. While it runs, the screen stays awake for 30 minutes, then the Switch sleep timer can kick in again. Press the Switch <strong>Home</strong> button to leave NXStation. Your library position is saved.
             </aside>
+            <p>
+              Settings also has <strong>System Browser Style</strong> (carousel or list). List view uses per-system <code>{id}-list</code> art when you have it, otherwise the same carousel JPG as the wallpaper.
+            </p>
           </div>
         </div>
 
@@ -260,16 +265,16 @@
   "sspassword": "your_password"
 }</code></pre>
               </li>
-              <li>Open a game list, press <strong>Y</strong>, choose scrape options, and run a single-game or batch scrape.</li>
+              <li>Open a game list, press <strong>Y</strong>, choose scrape options, and run a single game or that system. From the systems screen, press <strong>Y</strong> and pick <strong>Scrape Library</strong> to batch every real system.</li>
             </ol>
-            <p>Developer API keys are built into the app — you only need your personal ScreenScraper login.</p>
+            <p>Developer API keys are built into the app. You only need your personal ScreenScraper login.</p>
 
             <h3>Adding Your Own Box Art &amp; Videos</h3>
             <p>
               Files are matched by the <strong>ROM filename stem</strong> (name without extension).
               Example ROM: <code>Chrono Trigger.sfc</code> → stem <code>Chrono Trigger</code>.
             </p>
-            <p><strong>ES-DE folder layout (recommended — auto-discovered):</strong></p>
+            <p><strong>ES-DE folder layout (recommended, auto-discovered):</strong></p>
             <ul class="faq-steps">
               <li>Box art: <code>sdmc:/roms/{systemId}/images/{stem}-image.jpg</code></li>
               <li>Thumbnail: <code>sdmc:/roms/{systemId}/images/{stem}-thumb.jpg</code></li>
@@ -292,7 +297,7 @@
             <h3>Video Preview Recommendations</h3>
             <ul class="faq-steps">
               <li>Use <strong>H.264</strong> in an <strong>.mp4</strong> container for best compatibility.</li>
-              <li>Scale videos to <strong>max 480×320</strong> before copying to the SD card — NXStation decodes at this size to avoid memory issues.</li>
+              <li>Scale videos to <strong>max 480×320</strong> before copying to the SD card. NXStation decodes at this size to avoid memory issues.</li>
               <li>Shorter clips (10–30 seconds) load faster in the game list preview pane.</li>
             </ul>
 
@@ -335,13 +340,13 @@
             <h3>Opening Analytics in NXStation</h3>
             <p>From the main system carousel, press <strong>Y</strong> → choose:</p>
             <ul class="faq-steps">
-              <li><strong>Playtime Analytics</strong> — session style, time-of-day heatmaps, backlog “dust” scores, and play habits.</li>
-              <li><strong>Personality Metrics</strong> — gamer tags, nostalgia breakdown, and time-warp stats derived from your RetroArch history.</li>
+              <li><strong>Playtime Analytics:</strong> session style, time-of-day heatmaps, backlog dust scores, and play habits.</li>
+              <li><strong>Personality Metrics:</strong> gamer tags, nostalgia breakdown, and time-warp stats from your RetroArch history.</li>
             </ul>
             <p>Press <strong>B</strong> to close the analytics dialog. Data stays on your SD card; nothing is sent to a server.</p>
 
             <aside class="wiki-callout wiki-callout--warn" role="note">
-              <strong>RetroArch logging only.</strong> Playtime Analytics and Personality Metrics read RetroArch runtime logs (<code>playlists/logs/*.lrtl</code>). Standalone cores such as <strong>tico-dolphin</strong> and <strong>tico-azahar</strong> do <em>not</em> write these logs — sessions launched through those cores will not appear in analytics until you use a RetroArch libretro core that supports runtime logging.
+              <strong>RetroArch logging only.</strong> Playtime Analytics and Personality Metrics read RetroArch runtime logs (<code>playlists/logs/*.lrtl</code>). Standalone cores such as <strong>tico-dolphin</strong> and <strong>tico-azahar</strong> do <em>not</em> write these logs. Sessions launched through those cores will not appear in analytics unless you use a RetroArch libretro core that supports runtime logging.
             </aside>
           </div>
         </div>
@@ -374,7 +379,13 @@
             </ul>
 
             <h3>More help</h3>
-            <p>See also the <a href="index.html#faq">homepage FAQ</a> or open <strong>Settings → Help — Data Folders</strong> inside the app for path reference.</p>
+            <p>See also the <a href="index.html#faq">homepage FAQ</a> or open <strong>Settings → Help, Data Folders</strong> inside the app for path reference.</p>
+
+            <h3>What's next?</h3>
+            <p>
+              The original planned list is finished. Search, screensaver, cloud backup, themes, music, list browser, library scrape: it is all in.
+              There is no public backlog after that. The app will keep getting patches when something is actually needed.
+            </p>
           </div>
         </div>
 
@@ -386,11 +397,11 @@
           </button>
           <div class="faq-item__panel" hidden>
             <p>
-              NXStation ships with RetroArch libretro cores for most systems. GameCube, Wii, and 3DS are different: the best results today come from standalone <strong>Tico</strong> cores maintained by the community. These are separate <code>.nro</code> homebrew apps — you download them yourself and point NXStation at the file.
+              NXStation ships with RetroArch libretro cores for most systems. GameCube, Wii, and 3DS are different: the best results today come from standalone <strong>Tico</strong> cores maintained by the community. These are separate <code>.nro</code> homebrew apps. You download them yourself and point NXStation at the file.
             </p>
 
             <aside class="wiki-callout wiki-callout--warn" role="note">
-              <strong>Experimental — for tinkerers.</strong> Custom standalone core support is experimental. NXStation only launches the core and passes your ROM; everything after that — stability, controls, how exit works — depends on the core maintainer, not NXStation. You may hit crashes, freezes, or end up back on the Switch home menu instead of NXStation. This path is for play testers and tinkerers who are willing to go the extra mile to download cores, tune settings, and work through rough edges.
+              <strong>Experimental, for tinkerers.</strong> Custom standalone core support is experimental. NXStation only launches the core and passes your ROM. Stability, controls, and how exit works depend on the core maintainer, not NXStation. You may hit crashes, freezes, or end up back on the Switch home menu instead of NXStation. This path is for people who are willing to download cores, tune settings, and live with rough edges.
             </aside>
 
             <h3>Recommended cores</h3>
@@ -413,7 +424,7 @@
                 </tbody>
               </table>
             </div>
-            <p>Grab the latest release <code>.nro</code> from each repo’s Releases page. Performance, compatibility, and how cleanly you return to NXStation all vary by title and by core version — expect a bumpy ride.</p>
+            <p>Grab the latest release <code>.nro</code> from each repo's Releases page. Performance, compatibility, and how cleanly you return to NXStation all vary by title and by core version. Expect a bumpy ride.</p>
 
             <h3>Install on SD card</h3>
             <ol class="faq-steps">
@@ -424,7 +435,7 @@
                   <li><code>tico-azahar.nro</code></li>
                 </ul>
               </li>
-              <li>Keep filenames simple — you will browse to the exact path in Settings.</li>
+              <li>Keep filenames simple. You will browse to the exact path in Settings.</li>
             </ol>
             <pre class="wiki-tree"><code>sdmc:/switch/NXStation/cores/
 ├── tico-dolphin.nro
@@ -436,12 +447,12 @@
               <li>Go to <strong>Core Paths</strong>.</li>
               <li>Select the system (<code>gc</code>, <code>wii</code>, or <code>3ds</code>).</li>
               <li>Browse to <code>sdmc:/switch/NXStation/cores/</code> and pick the matching <code>.nro</code>.</li>
-              <li>Launch a game from that system’s list — NXStation forwards the ROM to the standalone core.</li>
+              <li>Launch a game from that system's list. NXStation forwards the ROM to the standalone core.</li>
             </ol>
             <p>Overrides are saved in <code>sdmc:/switch/NXStation/settings/user_cores.json</code>. The default <code>roms_config.json</code> may still list RetroArch paths until you override them per system.</p>
 
             <aside class="wiki-callout" role="note">
-              <strong>Analytics:</strong> Tico standalone cores do not write RetroArch runtime logs. Play sessions through them are not counted in Playtime Analytics — see <a href="#wiki-analytics">Section 4</a>.
+              <strong>Analytics:</strong> Tico standalone cores do not write RetroArch runtime logs. Play sessions through them are not counted in Playtime Analytics. See <a href="#wiki-analytics">Section 4</a>.
             </aside>
           </div>
         </div>
@@ -456,11 +467,15 @@
             <h3>Theme structure</h3>
             <p>Each theme is a folder with a <code>theme.xml</code> file:</p>
             <pre class="wiki-tree"><code>sdmc:/switch/NXStation/data/theme/MyTheme/
-├── theme.xml          (required — color definitions)
-├── placeholder.jpg    (optional — system carousel fallback)
-├── placeholder_box.png (optional — missing box art)
+├── theme.xml          (required: color definitions)
+├── placeholder.jpg    (optional: system carousel fallback)
+├── placeholder_box.png (optional: missing box art)
+├── bgm.mp3            (optional: looping music)
+├── sfx/               (optional: nav.wav, confirm.wav, …)
+├── screensaver.jpg    (optional)
 └── backgrounds/
-    └── snes.jpg       (optional — per-system wallpaper)</code></pre>
+    ├── snes.jpg       (optional: carousel wallpaper)
+    └── snes-list.jpg  (optional: list-browser art)</code></pre>
 
             <h3>Supported color keys</h3>
             <p>Colors use <code>#RRGGBB</code> or <code>#RRGGBBAA</code> hex values. Example entries:</p>
@@ -479,8 +494,8 @@
                   <tr><td><code>nxstation/dialog_row</code></td><td>Menu rows inside dialogs</td></tr>
                   <tr><td><code>nxstation/title_text</code></td><td>Headings</td></tr>
                   <tr><td><code>nxstation/detail_text</code></td><td>Subtitles, hints</td></tr>
-                  <tr><td><code>nxstation/log_success</code></td><td>Scrape log — OK lines</td></tr>
-                  <tr><td><code>nxstation/log_failure</code></td><td>Scrape log — errors</td></tr>
+                  <tr><td><code>nxstation/log_success</code></td><td>Scrape log OK lines</td></tr>
+                  <tr><td><code>nxstation/log_failure</code></td><td>Scrape log errors</td></tr>
                 </tbody>
               </table>
             </div>
