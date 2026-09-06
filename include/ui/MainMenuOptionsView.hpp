@@ -9,6 +9,7 @@ enum class MainMenuAction {
     Search,
     JumpToSystem,
     ScanGames,
+    ScrapeLibrary,
     SyncCloud,
     PersonalityMetrics,
     PlaytimeAnalytics,

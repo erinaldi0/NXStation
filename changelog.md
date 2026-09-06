@@ -4,6 +4,23 @@ All notable changes to NXStation are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.0] - 2026-09-06
+
+### Added
+
+- **Scrape Library** on the systems Y menu — batch scrape every real system (no single-game option).
+- **Minus** starts the screensaver from the system carousel, system list, and game list.
+- Screensaver **keeps the screen awake for 30 minutes**, then allows the OS sleep timer again.
+
+### Changed
+
+- System **list browser** uses carousel JPGs (`romfs:/img/background/{id}.jpg`) when no `{id}-list` art exists (Favorites / Last Played unchanged).
+- Games with **no description** stay blank (no placeholder text).
+
+### Fixed
+
+- **Y menu** on the system list no longer lets Up/Down scroll the list behind the dialog.
+
 ## [1.0.0] - 2026-08-28
 
 ### Added

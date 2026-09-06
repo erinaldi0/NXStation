@@ -2,7 +2,7 @@
 
 Nintendo Switch homebrew ROM frontend (repo: `NXStation`). Borealis UI (xfangfang fork), RetroArch core-direct launch, ScreenScraper metadata, optional FFmpeg video previews.
 
-**Current version:** 1.0.0 (2026-08-28). See [`changelog.md`](changelog.md) and [`release_v1.0.0.md`](release_v1.0.0.md).
+**Current version:** 1.1.0 (2026-09-06). See [`changelog.md`](changelog.md) and [`release_v1.1.0.md`](release_v1.1.0.md).
 
 ## What it does
 
@@ -333,7 +333,7 @@ Settings → **Check for Updates**:
 3. Prefer release asset named exactly **`NXStation.nro`**
 4. Download to `NXStation.nro.tmp`, replace `paths::APP_NRO`, notify user to **restart**
 
-Release process: publish a GitHub Release with a semver tag (`v1.0.0`) and attach `NXStation.nro`. Without that asset name, the check reports an update but cannot install.
+Release process: publish a GitHub Release with a semver tag (`v1.1.0`) and attach `NXStation.nro`. Without that asset name, the check reports an update but cannot install.
 
 `Config::load` merges **new** bundled systems into an existing SD `roms_config.json` (does not overwrite user entries), and prunes retired IDs (currently `ps2`) from SD `roms_config.json` / `user_cores.json`.
 

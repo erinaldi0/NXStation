@@ -2,7 +2,7 @@
 
 Lightweight Nintendo Switch homebrew frontend for browsing ROM libraries, scraping box art / metadata / video previews / PDF manuals, and chain-loading RetroArch or standalone cores via `envSetNextLoad()`.
 
-**Current version:** 1.0.0 — see [`changelog.md`](changelog.md).
+**Current version:** 1.1.0 — see [`changelog.md`](changelog.md).
 
 **Docs:** [Wiki](https://nxstation.com/wiki.html) · [Blog](https://nxstation.com/blog.html) · [GitHub Releases](https://github.com/jiraiya78/NXStation/releases)
 
@@ -33,7 +33,7 @@ Horizon constraints from the spec are enforced:
 1. In-app: Settings → **Check for Updates** (needs internet). Downloads `NXStation.nro` from the latest GitHub Release asset and replaces `sdmc:/switch/NXStation/NXStation.nro`. Restart afterward.
 2. Manual: copy a new `NXStation.nro` over the same path. Settings and data are kept.
 
-Release publishers must attach an asset named exactly **`NXStation.nro`** and use a semver tag (`v1.0.0`).
+Release publishers must attach an asset named exactly **`NXStation.nro`** and use a semver tag (`v1.1.0`).
 
 ## Repository layout
 

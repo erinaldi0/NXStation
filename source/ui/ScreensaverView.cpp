@@ -148,6 +148,9 @@ ScreensaverView::ScreensaverView()
 ScreensaverView::~ScreensaverView()
 {
     *alive_ = false;
+#ifdef __SWITCH__
+    endKeepAwake();
+#endif
 }
 
 bool ScreensaverView::isShowing()
@@ -204,6 +207,9 @@ void ScreensaverView::willAppear(bool resetState)
     pickRandomGame();
     brls::Application::giveFocus(this);
     applyThemeColors();
+#ifdef __SWITCH__
+    beginKeepAwake();
+#endif
 }
 
 void ScreensaverView::applyThemeColors()
@@ -251,6 +257,10 @@ void ScreensaverView::willDisappear(bool resetState)
         onDismiss_ = nullptr;
         brls::sync(std::move(cb));
     }
+
+#ifdef __SWITCH__
+    endKeepAwake();
+#endif
 
     brls::Box::willDisappear(resetState);
 }
@@ -374,6 +384,9 @@ void ScreensaverView::frame(brls::FrameContext* ctx)
         delta = 0.f;
 
     tickPlayback(delta);
+#ifdef __SWITCH__
+    tickKeepAwake();
+#endif
 
     const uint32_t themeGen = ThemeManager::instance().uiGeneration();
     if (themeGen != themeGenApplied_)
@@ -381,6 +394,36 @@ void ScreensaverView::frame(brls::FrameContext* ctx)
 
     brls::Box::frame(ctx);
 }
+
+#ifdef __SWITCH__
+void ScreensaverView::beginKeepAwake()
+{
+    if (keepAwake_)
+        return;
+    appletSetAutoSleepDisabled(true);
+    appletSetMediaPlaybackState(true);
+    keepAwake_ = true;
+    keepAwakeStartedAt_ = brls::getCPUTimeUsec();
+}
+
+void ScreensaverView::endKeepAwake()
+{
+    if (!keepAwake_)
+        return;
+    appletSetMediaPlaybackState(false);
+    appletSetAutoSleepDisabled(false);
+    keepAwake_ = false;
+}
+
+void ScreensaverView::tickKeepAwake()
+{
+    if (!keepAwake_)
+        return;
+    constexpr brls::Time kKeepAwakeDurationUs = 1800LL * 1000000LL;
+    if (brls::getCPUTimeUsec() - keepAwakeStartedAt_ >= kKeepAwakeDurationUs)
+        endKeepAwake();
+}
+#endif
 
 void ScreensaverView::launchCurrent()
 {

@@ -1364,6 +1364,14 @@ void ScraperService::runBatchAsync(std::vector<GameItem> games, SystemConfig sys
 
                 const GameItem& game = games[i];
 
+                SystemConfig gameSystem = system;
+                const std::string gameSystemId =
+                    !game.systemId.empty() ? game.systemId : game.meta.systemId;
+                if (!gameSystemId.empty() && gameSystemId != system.id) {
+                    if (const SystemConfig* found = Config::instance().findSystem(gameSystemId))
+                        gameSystem = *found;
+                }
+
                 ScrapeProgress progress;
 
                 progress.index = i + 1;
@@ -1380,7 +1388,7 @@ void ScraperService::runBatchAsync(std::vector<GameItem> games, SystemConfig sys
 
 
 
-                if (mode == ScrapeMode::MissingArtOnly && !gameNeedsArtDownload(game, system)) {
+                if (mode == ScrapeMode::MissingArtOnly && !gameNeedsArtDownload(game, gameSystem)) {
 
                     ++skipped;
 
@@ -1455,7 +1463,7 @@ void ScraperService::runBatchAsync(std::vector<GameItem> games, SystemConfig sys
 
                 try {
 
-                    meta = scrapeBlocking(game, system, mode, error, stepProgress);
+                    meta = scrapeBlocking(game, gameSystem, mode, error, stepProgress);
 
                 } catch (...) {
 
@@ -1505,7 +1513,7 @@ void ScraperService::runBatchAsync(std::vector<GameItem> games, SystemConfig sys
                     ScrapeLog::writef("[%zu/%zu] %s — OK", progress.index, progress.total,
                                       progress.gameName.c_str());
 
-                    AppState::instance().updateGameMetadata(system.id, game.path, meta);
+                    AppState::instance().updateGameMetadata(gameSystem.id, game.path, meta);
 
                 }
 

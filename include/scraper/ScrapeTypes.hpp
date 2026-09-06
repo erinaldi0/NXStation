@@ -12,6 +12,9 @@ enum class ScrapeMode {
     Single,
 };
 
+/** ScrapeProgressView systemId for a library-wide batch (all real systems). */
+inline constexpr const char* kAllSystemsScrapeId = "__all__";
+
 struct ScrapeProgress {
     size_t index = 0;
     size_t total = 0;

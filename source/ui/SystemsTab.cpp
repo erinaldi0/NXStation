@@ -4,6 +4,7 @@
 #include "ui/GameListView.hpp"
 #include "ui/PushedActivity.hpp"
 #include "ui/SettingsTab.hpp"
+#include "ui/ScrapeMenuView.hpp"
 #include "ui/ScreensaverView.hpp"
 #include "ui/MainMenuOptionsView.hpp"
 #include "ui/LibraryScanView.hpp"
@@ -52,7 +53,7 @@ SystemsTab::SystemsTab()
     bgImageNext->setImageAlign(brls::ImageAlignment::CENTER);
     bgImageNext->setVisibility(brls::Visibility::GONE);
 
-    hintsLabel->setText("← → Browse   ·   A Open   ·   Y Menu   ·   + Settings");
+    hintsLabel->setText("← → Browse   ·   A Open   ·   Y Menu   ·   - Screensaver   ·   + Settings");
     setFocusable(true);
 
     if (!systemIds_.empty())
@@ -106,6 +107,14 @@ SystemsTab::SystemsTab()
         });
 
     this->registerAction(
+        "Screensaver", brls::ControllerButton::BUTTON_BACK, [](brls::View*) {
+            if (browser::overlayBlocksHostInput() || ScreensaverView::isActive())
+                return true;
+            ScreensaverView::present();
+            return true;
+        });
+
+    this->registerAction(
         "Menu", brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
             SF_LOG_ACTION("Systems/MainMenu");
             playConfirmSfx();
@@ -122,10 +131,12 @@ SystemsTab::SystemsTab()
                             }
                         }
                     });
-                else if (action == MainMenuAction::ScanGames)
-                    LibraryScanView::presentAll(true);
-                else if (action == MainMenuAction::SyncCloud)
-                    CloudSyncView::present();
+            else if (action == MainMenuAction::ScanGames)
+                LibraryScanView::presentAll(true);
+            else if (action == MainMenuAction::ScrapeLibrary)
+                ScrapeMenuView::presentLibraryAndStart();
+            else if (action == MainMenuAction::SyncCloud)
+                CloudSyncView::present();
                 else if (action == MainMenuAction::PersonalityMetrics)
                     presentPersonalityMetrics();
                 else if (action == MainMenuAction::PlaytimeAnalytics)
@@ -197,6 +208,9 @@ void SystemsTab::frame(brls::FrameContext* ctx)
 
 void SystemsTab::tickStickNavigation(float delta)
 {
+    if (systemIds_.empty() || browser::overlayBlocksHostInput())
+        return;
+
     constexpr float kDeadzone = 0.5f;
     constexpr float kInitialDelay = 0.35f;
     constexpr float kRepeatDelay = 0.15f;

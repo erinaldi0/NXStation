@@ -128,15 +128,27 @@ std::string resolveSystemListArt(const std::string& systemId)
     if (std::string custom = tryNameInDir(paths::BACKGROUNDS_DIR, systemId + "-list"); !custom.empty())
         return custom;
 
-    const std::string bundled = "romfs:/img/systems/" + systemId + ".png";
-    if (FileSystem::exists(bundled))
-        return bundled;
-
     if (isVirtualSystemId(systemId)) {
         const std::string stem = virtualSystemBackgroundStem(systemId);
-        if (std::string bundledVirtual = tryNameInDir("romfs:/img/background", stem); !bundledVirtual.empty())
-            return bundledVirtual;
+        if (std::string custom = tryNameInDir(paths::BACKGROUNDS_DIR, stem); !custom.empty())
+            return custom;
+        if (std::string bundled = tryNameInDir("romfs:/img/background/list", std::string(stem) + "-list");
+            !bundled.empty())
+            return bundled;
+        if (std::string bundled = tryNameInDir("romfs:/img/background", stem); !bundled.empty())
+            return bundled;
     }
+
+    if (std::string bundled = tryNameInDir("romfs:/img/background/list", systemId + "-list");
+        !bundled.empty())
+        return bundled;
+
+    if (std::string bundled = tryNameInDir("romfs:/img/background", systemId); !bundled.empty())
+        return bundled;
+
+    const std::string placeholder = "romfs:/img/systems/" + systemId + ".png";
+    if (FileSystem::exists(placeholder))
+        return placeholder;
 
     return {};
 }
@@ -204,7 +216,7 @@ std::string systemDescription(const std::string& systemId)
     auto it = gSystemDescriptions.find(systemId);
     if (it != gSystemDescriptions.end() && !it->second.empty())
         return it->second;
-    return "No description yet. Edit settings/system_descriptions.json to add one.";
+    return {};
 }
 
 std::string systemDisplayName(const std::string& systemId)
@@ -220,6 +232,21 @@ std::string systemGameCountLabel(const std::string& systemId)
 {
     const size_t count = AppState::instance().gamesFor(systemId).size();
     return std::to_string(count) + " games";
+}
+
+bool overlayBlocksHostInput()
+{
+    return brls::Application::getActivitiesStack().size() > 1;
+}
+
+std::vector<sf::GameItem> collectAllLibraryGames()
+{
+    std::vector<sf::GameItem> out;
+    for (const auto& sys : Config::instance().systems()) {
+        for (const auto& game : AppState::instance().gamesFor(sys.id))
+            out.push_back(game);
+    }
+    return out;
 }
 
 } // namespace sf::ui::browser

@@ -1,5 +1,8 @@
 #include "ui/ScrapeMenuView.hpp"
 #include "ui/FocusedMenuDialog.hpp"
+#include "ui/PushedActivity.hpp"
+#include "ui/ScrapeProgressView.hpp"
+#include "ui/SystemsBrowserData.hpp"
 #include "ui/UiSfx.hpp"
 
 #include "app/Config.hpp"
@@ -11,16 +14,17 @@
 
 namespace sf::ui {
 
-ScrapeMenuView::ScrapeMenuView(std::string systemId, ScrapeMenuCallback onSelect)
+ScrapeMenuView::ScrapeMenuView(std::string systemId, ScrapeMenuCallback onSelect, bool libraryWide)
     : systemId_(std::move(systemId))
     , onSelect_(std::move(onSelect))
+    , libraryWide_(libraryWide)
 {
     stylePopupMenuPanel(this);
 
     const SystemConfig* sys = Config::instance().findSystem(systemId_);
     auto* header = new brls::Header();
     header->setTitle("Scrape Library");
-    header->setSubtitle(sys ? sys->name : systemId_);
+    header->setSubtitle(libraryWide_ ? "All systems" : (sys ? sys->name : systemId_));
     this->addView(header);
 
     auto menuScroller = makePopupMenuScroller(460.f);
@@ -83,7 +87,8 @@ ScrapeMenuView::ScrapeMenuView(std::string systemId, ScrapeMenuCallback onSelect
         list->addView(row);
     };
 
-    addOption("Scrape Individual Game", ScrapeMode::Single);
+    if (!libraryWide_)
+        addOption("Scrape Individual Game", ScrapeMode::Single);
     addOption("Scrape All Games", ScrapeMode::Full);
     addOption("Scrape Missing Art", ScrapeMode::MissingArtOnly);
 
@@ -95,9 +100,31 @@ ScrapeMenuView::ScrapeMenuView(std::string systemId, ScrapeMenuCallback onSelect
 void ScrapeMenuView::present(const std::string& systemId, ScrapeMenuCallback onSelect,
                              std::function<void()> onDismiss)
 {
-    auto* menu = new ScrapeMenuView(systemId, std::move(onSelect));
+    auto* menu = new ScrapeMenuView(systemId, std::move(onSelect), false);
     auto* dialog = FocusedMenuDialog::present(menu, std::move(onDismiss));
     menu->dialog_ = dialog;
+}
+
+void ScrapeMenuView::presentLibrary(ScrapeMenuCallback onSelect, std::function<void()> onDismiss)
+{
+    auto* menu = new ScrapeMenuView(kAllSystemsScrapeId, std::move(onSelect), true);
+    auto* dialog = FocusedMenuDialog::present(menu, std::move(onDismiss));
+    menu->dialog_ = dialog;
+}
+
+void ScrapeMenuView::presentLibraryAndStart(std::function<void()> onDismiss)
+{
+    presentLibrary(
+        [](ScrapeMode mode) {
+            auto games = browser::collectAllLibraryGames();
+            if (games.empty()) {
+                brls::Application::notify("No games to scrape");
+                return;
+            }
+            auto* view = new ScrapeProgressView(kAllSystemsScrapeId, mode, std::move(games));
+            PushedActivity::push(new ScrapeProgressActivity(view));
+        },
+        std::move(onDismiss));
 }
 
 } // namespace sf::ui

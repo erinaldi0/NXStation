@@ -1,4 +1,5 @@
 #include "ui/ScrapeProgressView.hpp"
+#include "scraper/ScrapeTypes.hpp"
 #include "ui/ThemeManager.hpp"
 #include "ui/UiSfx.hpp"
 #include "app/AppState.hpp"
@@ -122,7 +123,10 @@ ScrapeProgressView::ScrapeProgressView(std::string systemId, ScrapeMode mode,
     logScroller->setScrollingIndicatorVisible(true);
 
     const SystemConfig* sys = Config::instance().findSystem(systemId_);
-    titleLabel->setText(sys ? sys->name : systemId_);
+    if (systemId_ == kAllSystemsScrapeId)
+        titleLabel->setText("All systems");
+    else
+        titleLabel->setText(sys ? sys->name : systemId_);
     titleLabel->setTextColor(ThemeManager::instance().color("brls/text"));
     gameLabel->setTextColor(ThemeManager::instance().color("brls/text"));
     counterLabel->setText("Preparing…");
@@ -334,8 +338,15 @@ void ScrapeProgressView::frame(brls::FrameContext* ctx)
 void ScrapeProgressView::startBatch()
 {
     if (games_.empty()) {
-        const auto& stored = AppState::instance().gamesFor(systemId_);
-        games_.assign(stored.begin(), stored.end());
+        if (systemId_ == kAllSystemsScrapeId) {
+            for (const auto& sysCfg : Config::instance().systems()) {
+                const auto& stored = AppState::instance().gamesFor(sysCfg.id);
+                games_.insert(games_.end(), stored.begin(), stored.end());
+            }
+        } else {
+            const auto& stored = AppState::instance().gamesFor(systemId_);
+            games_.assign(stored.begin(), stored.end());
+        }
     }
 
     if (games_.empty()) {
@@ -381,18 +392,31 @@ void ScrapeProgressView::startBatch()
     appendLog("Starting " + modeLabel(mode_) + " — " + std::to_string(games_.size()) + " titles",
               static_cast<int>(LogTone::Neutral));
 
-    const SystemConfig* sys = Config::instance().findSystem(systemId_);
-    if (!sys) {
-        phaseLabel->setText("Error");
-        appendLog("Unknown system: " + systemId_, static_cast<int>(LogTone::Failure));
-        running_ = false;
-        finished_ = true;
-        return;
+    SystemConfig fallback;
+    if (systemId_ != kAllSystemsScrapeId) {
+        const SystemConfig* sys = Config::instance().findSystem(systemId_);
+        if (!sys) {
+            phaseLabel->setText("Error");
+            appendLog("Unknown system: " + systemId_, static_cast<int>(LogTone::Failure));
+            running_ = false;
+            finished_ = true;
+            return;
+        }
+        fallback = *sys;
+    } else if (!games_.empty()) {
+        const std::string sid = games_.front().systemId.empty() ? games_.front().meta.systemId
+                                                               : games_.front().systemId;
+        if (const SystemConfig* sys = Config::instance().findSystem(sid))
+            fallback = *sys;
+        else
+            fallback.id = kAllSystemsScrapeId;
+    } else {
+        fallback.id = kAllSystemsScrapeId;
     }
 
     auto alive = alive_;
     AppState::instance().scraper().runBatchAsync(
-        games_, *sys, mode_,
+        games_, fallback, mode_,
         [this, alive](const sf::ScrapeProgress& progress) {
             if (!*alive)
                 return;

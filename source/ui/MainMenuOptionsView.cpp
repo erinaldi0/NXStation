@@ -46,6 +46,7 @@ MainMenuOptionsView::MainMenuOptionsView(MainMenuCallback onSelect)
     addOption("Search", MainMenuAction::Search);
     addOption("Jump to System", MainMenuAction::JumpToSystem);
     addOption("Scan Games", MainMenuAction::ScanGames);
+    addOption("Scrape Library", MainMenuAction::ScrapeLibrary);
     if (Config::instance().cloudAutoSaveEnabled())
         addOption("Backup Saves to Cloud", MainMenuAction::SyncCloud);
     addOption("Personality Metrics", MainMenuAction::PersonalityMetrics);

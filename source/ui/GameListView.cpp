@@ -59,10 +59,6 @@ std::string systemLabelFor(const std::string& systemId)
     return systemId;
 }
 
-constexpr const char* kPlaceholderDescription =
-    "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod "
-    "tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.";
-
 constexpr float kRowHeight = 64.f;
 constexpr const char* kRowReuseId = "GameRow";
 constexpr const char* kEmptyHeaderReuseId = "EmptyHeader";
@@ -344,11 +340,11 @@ GameListView::GameListView(std::string title, std::vector<sf::GameItem> games,
     artFrame->setClipsToBounds(true);
     previewCard->setClipsToBounds(true);
     applyGameArtPlaceholder(boxArt);
-    detailLabel->setText(kPlaceholderDescription);
+    detailLabel->setText("");
     detailLabel->setLineHeight(1.35f);
     detailLabel->setSingleLine(false);
     detailScroller->setScrollingIndicatorVisible(false);
-    hintsLabel->setText("A Launch   ·   X Star   ·   Y Menu   ·   R₃ Random   ·   L/R Page");
+    hintsLabel->setText("A Launch   ·   X Star   ·   Y Menu   ·   - Screensaver   ·   R₃ Random   ·   L/R Page");
     applyThemeColors();
 
     setupGameListScroller(scroller, this);
@@ -376,11 +372,11 @@ GameListView::GameListView(std::string systemId, size_t initialFocus)
     artFrame->setClipsToBounds(true);
     previewCard->setClipsToBounds(true);
     applyGameArtPlaceholder(boxArt);
-    detailLabel->setText(kPlaceholderDescription);
+    detailLabel->setText("");
     detailLabel->setLineHeight(1.35f);
     detailLabel->setSingleLine(false);
     detailScroller->setScrollingIndicatorVisible(false);
-    hintsLabel->setText("A Launch   ·   X Star   ·   Y Menu   ·   R₃ Random   ·   L/R Page");
+    hintsLabel->setText("A Launch   ·   X Star   ·   Y Menu   ·   - Screensaver   ·   R₃ Random   ·   L/R Page");
     applyThemeColors();
 
     setupGameListScroller(scroller, this);
@@ -400,6 +396,14 @@ void GameListView::registerListActions()
             return true;
         playConfirmSfx();
         openOptionsMenu();
+        return true;
+    });
+
+    this->registerAction(
+        "Screensaver", brls::ControllerButton::BUTTON_BACK, [this, alive](brls::View*) {
+        if (!*alive || overlayBlocking_ || ScreensaverView::isActive())
+            return true;
+        ScreensaverView::present();
         return true;
     });
 
@@ -471,6 +475,9 @@ void GameListView::resetDescriptionScroll()
 void GameListView::tickDescriptionScroll(float delta)
 {
     if (manualDescriptionScroll_)
+        return;
+
+    if (detailLabel->getFullText().empty())
         return;
 
     const float viewHeight = detailScroller->getHeight();
@@ -552,7 +559,7 @@ void GameListView::applyLightPreview(size_t index)
 
     focusedIndex_ = index;
     const auto& g = games_[index];
-    detailLabel->setText(g.meta.description.empty() ? kPlaceholderDescription : g.meta.description);
+    detailLabel->setText(g.meta.description);
 }
 
 void GameListView::stepListNav(int direction, bool repeating)
@@ -1407,7 +1414,7 @@ void GameListView::applyPreviewContent(size_t index)
     if (!customList_)
         NavigationState::update(systemId_, index, g.path);
 
-    detailLabel->setText(g.meta.description.empty() ? kPlaceholderDescription : g.meta.description);
+    detailLabel->setText(g.meta.description);
     resetDescriptionScroll();
 
     requestArtwork(index);

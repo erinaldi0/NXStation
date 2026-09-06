@@ -68,6 +68,13 @@ private:
     bool savedLoopPlayback_ = true;
     uint32_t themeGenApplied_ = 0;
     std::string screensaverImagePath_;
+#ifdef __SWITCH__
+    bool keepAwake_ = false;
+    brls::Time keepAwakeStartedAt_ = 0;
+    void beginKeepAwake();
+    void endKeepAwake();
+    void tickKeepAwake();
+#endif
 };
 
 /** Activity for screensaver — A launches previewed game, any other input dismisses. */

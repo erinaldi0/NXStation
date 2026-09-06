@@ -9,6 +9,7 @@
 #include "ui/MainMenuOptionsView.hpp"
 #include "ui/PlaytimeScreens.hpp"
 #include "ui/PushedActivity.hpp"
+#include "ui/ScrapeMenuView.hpp"
 #include "ui/ScreensaverView.hpp"
 #include "ui/SettingsTab.hpp"
 #include "ui/SystemJumpView.hpp"
@@ -268,7 +269,7 @@ SystemsListTab::SystemsListTab()
     inflateFromXMLRes("xml/views/systems_list.xml");
 
     titleLabel->setText("Systems");
-    hintsLabel->setText("↑ ↓ Browse   ·   A Open   ·   Y Menu   ·   + Settings");
+    hintsLabel->setText("↑ ↓ Browse   ·   A Open   ·   Y Menu   ·   - Screensaver   ·   + Settings");
 
     artImage->setScalingType(brls::ImageScalingType::FIT);
     artImage->setImageAlign(brls::ImageAlignment::CENTER);
@@ -338,6 +339,12 @@ void SystemsListTab::registerActions()
             brls::sync([]() { SettingsTab::open(); });
             return true;
         });
+    registerAction("Screensaver", brls::ControllerButton::BUTTON_BACK, [](brls::View*) {
+        if (browser::overlayBlocksHostInput() || ScreensaverView::isActive())
+            return true;
+        ScreensaverView::present();
+        return true;
+    });
     registerAction("Menu", brls::ControllerButton::BUTTON_Y, [this](brls::View*) {
         SF_LOG_ACTION("Systems/MainMenu");
         playConfirmSfx();
@@ -355,6 +362,8 @@ void SystemsListTab::registerActions()
                 });
             else if (action == MainMenuAction::ScanGames)
                 LibraryScanView::presentAll(true);
+            else if (action == MainMenuAction::ScrapeLibrary)
+                ScrapeMenuView::presentLibraryAndStart();
             else if (action == MainMenuAction::SyncCloud)
                 CloudSyncView::present();
             else if (action == MainMenuAction::PersonalityMetrics)
@@ -694,7 +703,7 @@ void SystemsListTab::willAppear(bool resetState)
 
 void SystemsListTab::tickButtonNavigation(float delta)
 {
-    if (systemIds_.empty())
+    if (systemIds_.empty() || browser::overlayBlocksHostInput())
         return;
 
     const auto& pad = brls::Application::getControllerState();
