@@ -616,7 +616,11 @@ bool Config::loadRomMConfig()
         rc.syncAfterReturn = j.value("sync_after_return", true);
         rc.conflictPolicy = romm::conflictPolicyFromString(j.value("conflict_policy", std::string("keep_both")));
         rc.stateCoreMatching = j.value("state_core_matching", true);
-        rc.romMappingFile = j.value("rom_mapping_file", std::string("romm_library.json"));
+        rc.romMappingFile = j.value("rom_mapping_file", std::string("romm_mappings.json"));
+        // Older settings stored the mapping file under the library-cache name, which made the
+        // two services overwrite each other; force the split for existing installs.
+        if (rc.romMappingFile == "romm_library.json")
+            rc.romMappingFile = "romm_mappings.json";
 
         SF_LOG_I("Config", "Loaded RomM config from %s", path.c_str());
         return true;

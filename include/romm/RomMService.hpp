@@ -57,7 +57,11 @@ public:
     bool wasRecentlySynced(const std::string& romPath) const;
 
     /** Load the persisted library snapshot (call after initialize). */
-    bool loadLibraryCache() { return library_->loadCache(); }
+    bool loadLibraryCache() {
+        bool ok = library_->loadCache();
+        rebuildMappingsFromCache();
+        return ok;
+    }
 
     /** Populate the "romm" virtual system in AppState from the library cache (main thread). */
     void populateVirtualLibrary();
@@ -120,6 +124,10 @@ private:
 
     void applyConfig(const RomMConfig& config);
     bool ensureAuthenticated(std::string& errorOut);
+
+    /** Re-register mappings for cache entries marked downloaded (recovers installs whose
+        mapping file was overwritten by the library cache under the shared legacy name). */
+    void rebuildMappingsFromCache();
 };
 
 } // namespace sf::romm

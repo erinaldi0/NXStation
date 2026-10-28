@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Download progress**: per-file byte progress (percent + file name) instead of a stuck "Starting download" label; B aborts mid-transfer, and re-downloading an existing ROM no longer fails at the rename step.
 - `Virtual library: N entries (N downloaded)` logged a moved-from vector and always printed 0.
 - The ROM mapping file accepts a top-level JSON array as well as `{"mappings": [...]}`.
+- **Mappings lost after restart**: legacy installs stored the ROM mapping file under the library-cache name, so `saveCache()` overwrote it on the next startup and **Sync Now** reported `Nothing to sync yet` even for downloaded ROMs. The mapping file now has its own name (`romm_mappings.json`); surviving legacy data is migrated on load, and mappings for downloaded ROMs are rebuilt from the library cache entries.
 - `HTTP 401` errors now state that the token is invalid/expired and needs re-pairing.
 
 ### Notes

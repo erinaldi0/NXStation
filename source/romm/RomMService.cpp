@@ -96,6 +96,29 @@ void RomMService::refreshConfig() {
     SF_LOG_I("RomM", "Config refreshed: enabled=%d, server=%s", enabled_, config_.serverUrl.c_str());
 }
 
+void RomMService::rebuildMappingsFromCache() {
+    if (!mapper_ || !library_) return;
+
+    // The library cache records which entries were downloaded and where. Installs whose
+    // mapping data was overwritten by the cache (shared legacy filename) recover their
+    // mappings from these entries, so "Sync Now" still has work after a restart.
+    size_t rebuilt = 0;
+    for (const auto& entry : library_->entries()) {
+        if (entry.rom.id.empty() || entry.localPath.empty() || !entry.downloadedLocally)
+            continue;
+        if (mapper_->getMappingByRomMId(entry.rom.id))
+            continue;
+
+        const SystemConfig* sys = sf::Config::instance().findSystem(entry.matchedSystemId);
+        mapper_->addOrUpdateMapping(entry.rom.id, entry.matchedSystemId, entry.localPath,
+                                    entry.rom.name, sys ? sys->core : "");
+        ++rebuilt;
+    }
+
+    if (rebuilt > 0)
+        SF_LOG_I("RomM", "Rebuilt %zu ROM mapping(s) from the library cache", rebuilt);
+}
+
 bool RomMService::ensureAuthenticated(std::string& errorOut) {
     if (!client_.isReady()) {
         errorOut = "RomM not configured or authenticated";

@@ -26,7 +26,7 @@ struct RomMConfig {
     bool syncAfterReturn = true;    // Upload on next NXStation startup
     ConflictPolicy conflictPolicy = ConflictPolicy::KeepBoth;
     bool stateCoreMatching = true;  // Only restore states to compatible cores
-    std::string romMappingFile = "romm_library.json"; // ROM ID mapping file
+    std::string romMappingFile = "romm_mappings.json"; // ROM ID mapping file (must not collide with the library cache)
 
     // Runtime-only (not persisted to config file)
     std::string accessToken;        // Bearer token for API calls

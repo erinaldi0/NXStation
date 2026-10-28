@@ -27,8 +27,27 @@ bool RomMSaveMapper::loadMappings() {
 
     const std::string path = mappingsFilePath();
     if (!FileSystem::exists(path)) {
-        SF_LOG_I("RomM", "No mapping file at %s", path.c_str());
-        return true;
+        // Migration: older builds used "romm_library.json" for both the library cache and the
+        // mappings, so whichever service saved last silently overwrote the other — sync then
+        // reported "nothing to sync yet" after a restart. Adopt a legacy file that actually
+        // contains mappings and move it to the dedicated mapping path.
+        const std::string legacy = std::string(paths::DATA_DIR) + "/romm_library.json";
+        if (legacy != path && FileSystem::exists(legacy)) {
+            try {
+                const auto legacyJson = Json::parse(FileSystem::readFile(legacy));
+                if (legacyJson.is_object() && legacyJson.contains("mappings") &&
+                    legacyJson["mappings"].is_array() && legacyJson["mappings"].size() > 0) {
+                    if (FileSystem::createDirectories(FileSystem::parentPath(path)) &&
+                        FileSystem::writeFile(path, legacyJson.dump(2)))
+                        SF_LOG_I("RomM", "Migrated ROM mappings from legacy %s to %s",
+                                 legacy.c_str(), path.c_str());
+                }
+            } catch (const std::exception&) {}
+        }
+        if (!FileSystem::exists(path)) {
+            SF_LOG_I("RomM", "No mapping file at %s", path.c_str());
+            return true;
+        }
     }
 
     try {
