@@ -77,6 +77,13 @@ public:
 
     /** Remove a ROM from the in-memory index (and optionally from favorites / last played). */
     bool removeGame(const std::string& systemId, const std::string& romPath);
+
+    /** Cloud-only RomM rows per system; kept so a re-scan re-adds them after scanning. */
+    void setCloudGames(const std::string& systemId, std::vector<GameItem> cloudGames);
+    /** Merge a system's cloud rows into its scanned list (deduped, A–Z). */
+    void mergeCloudGames(const std::string& systemId);
+    /** Update an already-merged row for a RomM game that has since been downloaded. */
+    void refreshDownloadedRow(const std::string& systemId, const GameItem& game);
     /** Update path/filename/displayName after a successful on-disk rename. */
     bool renameGame(const std::string& systemId, const std::string& oldPath,
                     const std::string& newPath);
@@ -108,6 +115,8 @@ private:
 
     mutable std::mutex gamesMutex_;
     std::unordered_map<std::string, std::vector<GameItem>> gamesBySystem_;
+    /** Cloud-only RomM rows (not downloaded), kept per system so scanning preserves them. */
+    std::unordered_map<std::string, std::vector<GameItem>> cloudGamesBySystem_;
 
     mutable std::mutex scanMutex_;
     std::condition_variable scanCv_;

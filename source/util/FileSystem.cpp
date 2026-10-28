@@ -191,6 +191,26 @@ bool FileSystem::renameFile(const std::string& from, const std::string& to)
 #endif
 }
 
+bool FileSystem::renameFileOverwrite(const std::string& from, const std::string& to)
+{
+    if (from.empty() || to.empty() || from == to)
+        return false;
+    if (!exists(from))
+        return false;
+
+    const std::string parent = parentPath(to);
+    if (!parent.empty())
+        createDirectories(parent);
+
+    // On Switch FAT an existing destination makes plain rename fail, so drop it first.
+    if (exists(to) && !removeFile(to)) {
+        SF_LOG_E("FS", "Failed to remove existing file before rename: %s", to.c_str());
+        return false;
+    }
+
+    return renameFile(from, to);
+}
+
 bool FileSystem::copyFile(const std::string& from, const std::string& to)
 {
     if (from.empty() || to.empty() || from == to)

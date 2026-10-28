@@ -166,7 +166,17 @@ void AppState::persistLibraryCache()
     std::unordered_map<std::string, std::vector<GameItem>> snapshot;
     {
         std::lock_guard<std::mutex> lock(gamesMutex_);
-        snapshot = gamesBySystem_;
+        // Cloud-only rows live in the RomM library cache; do not write them to the ROM index.
+        for (const auto& [systemId, games] : gamesBySystem_) {
+            std::vector<GameItem> stored;
+            stored.reserve(games.size());
+            for (const auto& g : games) {
+                if (g.fromRomM && g.path.empty())
+                    continue;
+                stored.push_back(g);
+            }
+            snapshot[systemId] = std::move(stored);
+        }
     }
     LibraryCache::save(snapshot);
 }
@@ -254,6 +264,8 @@ void AppState::scanSystem(const std::string& systemId, bool force,
 
     SF_LOG_I("App", "Scanned %s -> %zu games", systemId.c_str(), games.size());
     setGames(systemId, std::move(games));
+    // Cloud-only RomM rows belong to the system section they were scanned into.
+    mergeCloudGames(systemId);
     persistLibraryCache();
 
     {
@@ -285,6 +297,87 @@ void AppState::setGames(const std::string& systemId, std::vector<GameItem> games
 {
     std::lock_guard<std::mutex> lock(gamesMutex_);
     gamesBySystem_[systemId] = std::move(games);
+}
+
+void AppState::setCloudGames(const std::string& systemId, std::vector<GameItem> cloudGames)
+{
+    std::lock_guard<std::mutex> lock(gamesMutex_);
+    cloudGamesBySystem_[systemId] = std::move(cloudGames);
+}
+
+void AppState::mergeCloudGames(const std::string& systemId)
+{
+    std::lock_guard<std::mutex> lock(gamesMutex_);
+
+    const auto cloudIt = cloudGamesBySystem_.find(systemId);
+    if (cloudIt == cloudGamesBySystem_.end() || cloudIt->second.empty())
+        return;
+
+    auto& games = gamesBySystem_[systemId];
+    for (const auto& cloud : cloudIt->second) {
+        bool matched = false;
+        for (auto& existing : games) {
+            const bool sameRom = !cloud.rommRomId.empty() && existing.rommRomId == cloud.rommRomId;
+            const bool samePath = !cloud.path.empty() && existing.path == cloud.path;
+            if (!sameRom && !samePath)
+                continue;
+
+            // Keep the row that already exists, but bring it up to date: a cloud row that
+            // has since been downloaded loses its badge and points at the local file.
+            if (existing.path.empty() && !cloud.path.empty())
+                existing.path = cloud.path;
+            if (existing.rommRomId.empty())
+                existing.rommRomId = cloud.rommRomId;
+            existing.fromRomM = existing.fromRomM || cloud.fromRomM;
+            existing.cloudAvailable = existing.path.empty();
+            existing.discCount = existing.discCount < cloud.discCount ? cloud.discCount : existing.discCount;
+            matched = true;
+            break;
+        }
+        if (matched)
+            continue;
+        games.push_back(cloud);
+    }
+
+    std::stable_sort(games.begin(), games.end(),
+                     [](const GameItem& a, const GameItem& b) {
+                         return Utf8::compareTitles(a.displayName, b.displayName);
+                     });
+}
+
+void AppState::refreshDownloadedRow(const std::string& systemId, const GameItem& game)
+{
+    std::lock_guard<std::mutex> lock(gamesMutex_);
+
+    auto it = gamesBySystem_.find(systemId);
+    if (it == gamesBySystem_.end())
+        return;
+
+    for (auto& existing : it->second) {
+        if (existing.rommRomId.empty() || existing.rommRomId != game.rommRomId)
+            continue;
+
+        // The row was merged as cloud-only before the download; mergeCloudGames cannot fix it
+        // anymore because the game is no longer in cloudBySystem. Point it at the local file.
+        existing.path = game.path;
+        existing.cloudAvailable = false;
+        existing.fromRomM = true;
+
+        // Fill in whatever the merged row was missing; keep any richer local scrape metadata.
+        if (existing.meta.romPath.empty())
+            existing.meta.romPath = game.path;
+        if (existing.meta.description.empty())
+            existing.meta.description = game.meta.description;
+        if (existing.meta.genre.empty())
+            existing.meta.genre = game.meta.genre;
+        if (existing.meta.developer.empty())
+            existing.meta.developer = game.meta.developer;
+        if (existing.meta.publisher.empty())
+            existing.meta.publisher = game.meta.publisher;
+        if (existing.meta.releaseDate.empty())
+            existing.meta.releaseDate = game.meta.releaseDate;
+        break;
+    }
 }
 
 void AppState::updateGameMetadata(const std::string& systemId, const std::string& romPath,

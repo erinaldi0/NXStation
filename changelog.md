@@ -4,6 +4,29 @@ All notable changes to NXStation are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- **RomM library on the main page**: a `RomM` virtual system lists every ROM from the paired RomM server (cached in `data/romm_library.json`, so it populates offline; refreshed from the server on startup). Rows show platform + `Remote` / `Downloaded`.
+- **Download & play**: press **A** on a remote RomM row to download it (per-file progress view, B aborts) into `sdmc:/romm/{systemId}/`, then launch with the matched system's core. Y menu adds **Download from RomM** for remote rows.
+- **Save + state sync at startup**: RomM negotiation runs on every startup — it uploads what the previous game session produced and pulls remote saves/states for the current session. Pre-launch sync per game (Settings → RomM Sync → **Sync Before Launch**) still applies.
+- RomM settings: **Refresh Library** row; pairing unchanged. **Refresh Library now paginates** `GET /api/roms?limit=100&offset=n` — RomM answers 50 rows per page by default, so only the first page was cached.
+- **Sync Now** shows live per-ROM progress (stage + `ROM n/m`) and a summary (`Synced 12 of 14 ROMs`). It syncs the mapped ROMs, i.e. the ones downloaded from RomM, so with nothing downloaded yet it reports `Nothing to sync yet — download a ROM from the RomM library first` instead of opening a blank page; the **Last Sync** row updates from it.
+- Downloads register a ROM mapping (`data/romm_library.json` + `romm_mapping` via `RomMSaveMapper`) so save/state sync covers downloaded ROMs.
+
+### Fixed
+
+- **State store save**: the atomic rename refused an existing destination, so the pairing token was never persisted after the first run and startup requests answered `HTTP 401`. Affected writes now use `FileSystem::renameFileOverwrite`.
+- **Download progress**: per-file byte progress (percent + file name) instead of a stuck "Starting download" label; B aborts mid-transfer, and re-downloading an existing ROM no longer fails at the rename step.
+- `Virtual library: N entries (N downloaded)` logged a moved-from vector and always printed 0.
+- The ROM mapping file accepts a top-level JSON array as well as `{"mappings": [...]}`.
+- `HTTP 401` errors now state that the token is invalid/expired and needs re-pairing.
+
+### Notes
+
+- Game-exit sync: NXStation quits during play (`envSetNextLoad` handoff), so the upload runs at the earliest possible moment after the game exits — when NXStation restarts via the return chain. RetroArch writes saves/states on exit before that happens.
+
 ## [1.1.0] - 2026-09-06
 
 ### Added
