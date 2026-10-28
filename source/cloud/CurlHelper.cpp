@@ -338,7 +338,7 @@ CurlResponse CurlHelper::uploadFromFile(const std::string& url, const std::strin
 }
 
 CurlResponse CurlHelper::downloadToFile(const std::string& url, const std::string& filePath,
-                                        const ProgressFn& progress)
+                                        const ProgressFn& progress, bool allowResume)
 {
     // Dedicated handle + mutex: a multi-minute ROM transfer must not wait behind (or block)
     // the short API calls that share the API handle across pool workers.
@@ -356,12 +356,18 @@ CurlResponse CurlHelper::downloadToFile(const std::string& url, const std::strin
 
     // RomM serves 202 + Retry-After while a stored file is converted to a requested format, so
     // a non-2xx first response can be a wait-and-retry instead of a failure.
-    constexpr int kMaxAttempts = 3;
+    const int kMaxAttempts = allowResume ? 5 : 3;
 
     for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
         resp = CurlResponse{};
 
-        std::ofstream out(filePath, std::ios::binary | std::ios::trunc);
+        // Resumable downloads keep whatever is already on disk and ask for the rest with a
+        // Range header. Bytes received before a dropped connection stay on disk so the next
+        // attempt — or the next app launch — continues from them.
+        const int64_t existing = allowResume ? static_cast<int64_t>(FileSystem::fileSize(filePath)) : 0;
+
+        std::ofstream out(filePath,
+                          std::ios::binary | (existing > 0 ? std::ios::app : std::ios::trunc));
         if (!out) {
             resp.error = "Cannot open output file";
             SF_LOG_E("Cloud", "Cannot open output file: %s", filePath.c_str());
@@ -369,11 +375,23 @@ CurlResponse CurlHelper::downloadToFile(const std::string& url, const std::strin
             return resp;
         }
 
+        // The progress callback reports bytes for this request only; shift them so the UI sees
+        // whole-file progress including anything already resumed from disk.
+        if (progress && existing > 0) {
+            progressFn_ = [progress, existing](int64_t downloaded, int64_t total) -> bool {
+                return progress(downloaded + existing, total > 0 ? total + existing : 0);
+            };
+        }
+
         applyBaseOptions(handle, downloadTimeout_);
 
         curl_slist* hdr = nullptr;
         if (!auth.empty())
             hdr = curl_slist_append(hdr, auth.c_str());
+        if (existing > 0) {
+            const std::string rangeHeader = "Range: bytes=" + std::to_string(existing) + "-";
+            hdr = curl_slist_append(hdr, rangeHeader.c_str());
+        }
 
         std::map<std::string, std::string> headers;
         curl_easy_setopt(handle, CURLOPT_URL, url.c_str());
@@ -402,7 +420,9 @@ CurlResponse CurlHelper::downloadToFile(const std::string& url, const std::strin
 
         if (code == CURLE_ABORTED_BY_CALLBACK) {
             resp.error = "Transfer aborted";
-            FileSystem::removeFile(filePath);
+            // With resume enabled the partial file is kept so a later attempt continues from it.
+            if (!allowResume)
+                FileSystem::removeFile(filePath);
             progressFn_ = nullptr;
             return resp;
         }
@@ -411,8 +431,13 @@ CurlResponse CurlHelper::downloadToFile(const std::string& url, const std::strin
             resp.error = curl_easy_strerror(code);
             SF_LOG_E("Cloud", "Download attempt %d failed (%s): %s", attempt + 1, url.c_str(),
                      resp.error.c_str());
-            const bool retryable = code == CURLE_FAILED_INIT || code == CURLE_COULDNT_CONNECT;
-            FileSystem::removeFile(filePath);
+            const bool retryable = code == CURLE_FAILED_INIT || code == CURLE_COULDNT_CONNECT ||
+                                   code == CURLE_OPERATION_TIMEDOUT || code == CURLE_RECV_ERROR ||
+                                   code == CURLE_SEND_ERROR;
+            // Bytes received in a dropped transfer are real content, so a resumable download
+            // keeps the partial file for the next attempt instead of deleting it.
+            if (!allowResume)
+                FileSystem::removeFile(filePath);
             if (!retryable || attempt + 1 >= kMaxAttempts) {
                 progressFn_ = nullptr;
                 return resp;
@@ -423,6 +448,23 @@ CurlResponse CurlHelper::downloadToFile(const std::string& url, const std::strin
 
         resp.ok = resp.status >= 200 && resp.status < 300;
         if (resp.ok) {
+            if (allowResume && existing > 0 && resp.status != 206) {
+                // The server ignored the Range header and streamed the whole file on top of the
+                // partial bytes, so this attempt's file is corrupt. Throw it away and restart.
+                SF_LOG_W("Cloud", "Server ignored Range for %s; restarting from byte 0", filePath.c_str());
+                FileSystem::removeFile(filePath);
+                resp.ok = false;
+                resp.error = "Server does not support resumable downloads";
+                if (attempt + 1 < kMaxAttempts) {
+                    std::this_thread::sleep_for(std::chrono::seconds(2));
+                    continue;
+                }
+                progressFn_ = nullptr;
+                return resp;
+            }
+            if (existing > 0)
+                SF_LOG_I("Cloud", "Resumed %s from %lld bytes (HTTP %ld)", filePath.c_str(),
+                         static_cast<long long>(existing), resp.status);
             SF_LOG_I("Cloud", "Downloaded %s -> %s (HTTP %ld)", url.c_str(), filePath.c_str(),
                      resp.status);
             progressFn_ = nullptr;
@@ -431,7 +473,19 @@ CurlResponse CurlHelper::downloadToFile(const std::string& url, const std::strin
 
         resp.error = "HTTP " + std::to_string(resp.status);
         SF_LOG_E("Cloud", "Download HTTP %ld for %s", resp.status, url.c_str());
+        // An error response body is not content, so the partial file cannot be trusted.
         FileSystem::removeFile(filePath);
+
+        if (resp.status == 416) {
+            // 416 = the partial file is longer than the server's copy, i.e. the ROM changed
+            // remotely. The stale bytes are gone now, so retrying starts from byte 0.
+            if (attempt + 1 < kMaxAttempts) {
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                continue;
+            }
+            progressFn_ = nullptr;
+            return resp;
+        }
 
         // 4xx will not improve on retry; only conversion (202) and server errors are worth waiting for.
         if (resp.status != 202 || resp.status < 500) {

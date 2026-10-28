@@ -51,8 +51,13 @@ public:
   CurlResponse postJsonCaptureHeaders(const std::string& url, const std::string& jsonBody);
     CurlResponse patchCaptureHeaders(const std::string& url);
     CurlResponse uploadFromFile(const std::string& url, const std::string& filePath);
+    /**
+     * Download to a file. When `allowResume` is set and the destination already has bytes, the
+     * request sends a Range header and appends; a dropped transfer keeps the partial file so the
+     * next attempt (or the next app launch) continues from it instead of starting over.
+     */
     CurlResponse downloadToFile(const std::string& url, const std::string& filePath,
-                                const ProgressFn& progress = {});
+                                const ProgressFn& progress = {}, bool allowResume = false);
     CurlResponse deleteUrl(const std::string& url);
 
 private:
@@ -84,7 +89,7 @@ private:
     ProgressFn progressFn_;
     long connectTimeout_ = 30;
     long transferTimeout_ = 120;
-    long downloadTimeout_ = 900;
+    long downloadTimeout_ = 1800;
     mutable std::mutex mutex_;
     mutable std::mutex downloadMutex_;
 };

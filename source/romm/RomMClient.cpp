@@ -544,25 +544,26 @@ bool RomMClient::fetchSimpleRom(const std::string& romId, RomMLibraryEntry& out)
 }
 
 bool RomMClient::downloadRom(const std::string& romId, const std::string& fileName,
-                             const std::string& localPath, const sf::cloud::ProgressFn& progress) {
+                             const std::string& localPath, const sf::cloud::ProgressFn& progress,
+                             bool allowResume) {
     if (!ready_) {
         lastError_ = "Client not authenticated";
         return false;
     }
 
     std::string url = buildUrl("/roms/" + romId + "/content/" + fileName);
-    const sf::cloud::CurlResponse resp = curl_.downloadToFile(url, localPath, progress);
+    const sf::cloud::CurlResponse resp = curl_.downloadToFile(url, localPath, progress, allowResume);
     return checkResponse(resp, "ROM download");
 }
 
 bool RomMClient::downloadToUrl(const std::string& url, const std::string& localPath,
-                               const sf::cloud::ProgressFn& progress) {
+                               const sf::cloud::ProgressFn& progress, bool allowResume) {
     if (!ready_) {
         lastError_ = "Client not authenticated";
         return false;
     }
 
-    const sf::cloud::CurlResponse resp = curl_.downloadToFile(url, localPath, progress);
+    const sf::cloud::CurlResponse resp = curl_.downloadToFile(url, localPath, progress, allowResume);
     return checkResponse(resp, "URL download");
 }
 

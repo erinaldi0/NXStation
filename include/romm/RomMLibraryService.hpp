@@ -27,6 +27,8 @@ struct DownloadProgress {
     int64_t downloadedBytes = 0;
     int64_t totalBytes = 0;     // 0 when the server does not report a content length
     std::string fileName;
+    /** True when the transfer continued from bytes already on disk (a resumed .part file). */
+    bool resumed = false;
 };
 
 /** Progress callback; return true to abort the download. */

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
@@ -24,6 +25,8 @@ struct DirEntry {
 class FileSystem {
 public:
     static bool exists(const std::string& path);
+    /** Size in bytes of an existing file; 0 when the path is missing. */
+    static uint64_t fileSize(const std::string& path);
     static bool isDirectory(const std::string& path);
     static bool createDirectories(const std::string& path);
     static bool ensureAppDirectories();

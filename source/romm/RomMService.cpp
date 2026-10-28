@@ -333,12 +333,13 @@ void RomMService::downloadRomAsync(const LibraryEntry& entry,
                                     : 0;
 
             std::string message;
+            const std::string verb = p.resumed ? "Resuming " : "Downloading ";
             if (p.totalBytes > 0) {
-                message = "Downloading " + p.fileName + " (" + std::to_string(filePercent) + "%, " +
+                message = verb + p.fileName + " (" + std::to_string(filePercent) + "%, " +
                           formatSize(p.downloadedBytes) + " / " + formatSize(p.totalBytes) + ")";
             } else if (p.downloadedBytes > 0) {
                 // Chunked response with no Content-Length: report bytes so the UI keeps moving.
-                message = "Downloading " + p.fileName + " (" + formatSize(p.downloadedBytes) + ")";
+                message = verb + p.fileName + " (" + formatSize(p.downloadedBytes) + ")";
             } else {
                 message = "File " + std::to_string(p.fileIndex) + "/" + std::to_string(p.totalFiles) +
                           ": " + p.fileName;

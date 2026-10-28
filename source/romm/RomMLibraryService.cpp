@@ -620,16 +620,23 @@ bool RomMLibraryService::downloadFileAtomic(const std::string& url, const std::s
     if (abort && abort->load())
         return false;
 
-    // Download to .part file first for atomic write
+    // Download to .part file first for atomic write. A leftover .part from a dropped transfer is
+    // resumed with a Range header instead of being overwritten, so a long download can survive a
+    // console sleep / app restart and continue from where it stopped.
     std::string partPath = destPath + ".part";
+    const int64_t resumedBytes = static_cast<int64_t>(FileSystem::fileSize(partPath));
 
     int lastPercent = -1;
     int64_t lastReportedBytes = 0;
+    int64_t observedContentTotal = 0;  // whole-file size seen on the wire when Content-Length exists
     sf::cloud::ProgressFn onBytes = [&](int64_t downloaded, int64_t total) -> bool {
         if (abort && abort->load())
             return true;
         if (!progress)
             return false;
+
+        if (total > 0)
+            observedContentTotal = total;
 
         // RomM streams multi-part ROMs as a ZIP, which often has no Content-Length, so `total`
         // can be 0. Percent then never changes and the UI would sit on "Starting download" for the
@@ -646,12 +653,17 @@ bool RomMLibraryService::downloadFileAtomic(const std::string& url, const std::s
         DownloadProgress p = base;
         p.downloadedBytes = downloaded;
         p.totalBytes = knownTotal;
+        p.resumed = resumedBytes > 0;
         return progress(p);
     };
 
+    if (resumedBytes > 0)
+        SF_LOG_I("RomM", "Resuming %s from %lld bytes", partPath.c_str(),
+                 static_cast<long long>(resumedBytes));
+
     SF_LOG_I("RomM", "GET %s -> %s", url.c_str(), destPath.c_str());
 
-    if (!client_.downloadToUrl(url, partPath, onBytes)) {
+    if (!client_.downloadToUrl(url, partPath, onBytes, /*allowResume=*/true)) {
         SF_LOG_E("RomM", "Failed to download from %s: %s", url.c_str(), client_.lastError().c_str());
         return false;
     }
@@ -659,6 +671,18 @@ bool RomMLibraryService::downloadFileAtomic(const std::string& url, const std::s
     // Verify file was downloaded
     if (!FileSystem::exists(partPath)) {
         SF_LOG_E("RomM", "Downloaded file not found at %s", partPath.c_str());
+        return false;
+    }
+
+    // Integrity: extraction verifies CRCs, but a single-file download has no such check. If the
+    // wire reported the true size and the file on disk differs, the partial bytes came from a
+    // stale or changed server copy — drop them so the next attempt starts from byte 0.
+    const int64_t finalSize = static_cast<int64_t>(FileSystem::fileSize(partPath));
+    if (observedContentTotal > 0 && finalSize != observedContentTotal) {
+        SF_LOG_E("RomM", "Size mismatch on %s (%lld bytes vs %lld); partial bytes discarded",
+                 partPath.c_str(), static_cast<long long>(finalSize),
+                 static_cast<long long>(observedContentTotal));
+        FileSystem::removeFile(partPath);
         return false;
     }
 

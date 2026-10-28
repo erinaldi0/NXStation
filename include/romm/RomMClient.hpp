@@ -146,9 +146,10 @@ public:
     /** Single ROM as SimpleRomSchema; used when the list response omits the `files` array. */
     bool fetchSimpleRom(const std::string& romId, RomMLibraryEntry& out);
     bool downloadRom(const std::string& romId, const std::string& fileName,
-                     const std::string& localPath, const sf::cloud::ProgressFn& progress = {});
+                     const std::string& localPath, const sf::cloud::ProgressFn& progress = {},
+                     bool allowResume = false);
     bool downloadToUrl(const std::string& url, const std::string& localPath,
-                       const sf::cloud::ProgressFn& progress = {});
+                       const sf::cloud::ProgressFn& progress = {}, bool allowResume = false);
     std::string buildUrlPublic(const std::string& path) const { return buildUrl(path); }
 
 private:

@@ -31,6 +31,20 @@ bool FileSystem::exists(const std::string& path)
 #endif
 }
 
+uint64_t FileSystem::fileSize(const std::string& path)
+{
+#ifdef __SWITCH__
+    struct stat st {};
+    if (stat(path.c_str(), &st) != 0)
+        return 0;
+    return static_cast<uint64_t>(st.st_size);
+#else
+    std::error_code ec;
+    const auto size = fs::file_size(path, ec);
+    return ec ? 0 : static_cast<uint64_t>(size);
+#endif
+}
+
 bool FileSystem::isDirectory(const std::string& path)
 {
 #ifdef __SWITCH__
