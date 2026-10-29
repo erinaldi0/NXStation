@@ -60,15 +60,18 @@ private:
 
     brls::Box* makeSectionHeader(const std::string& title, const std::string& count);
     brls::Box* makeCard(const GameItem& game, float width, float imageHeight,
-                        const std::string& detail);
-    brls::Box* makePill(const std::string& systemId);
+                        const std::string& detail, bool fillHeight = false);
+    brls::Box* makeTile(const std::string& systemId);
     brls::Box* makeBadge(const std::string& text);
 
     void buildTopBar();
-    void buildHeroSection();
-    void buildGamesSection(const std::string& headerTitle, const std::vector<GameItem>& games);
-    void buildPlatformsSection();
-    void buildMetadataSection();
+    brls::Box* buildHeroSection();
+    brls::Box* buildGamesSection(const std::string& headerTitle, const std::vector<GameItem>& games);
+    brls::Box* buildPlatformsSection();
+    brls::Box* buildRandomSection();
+    brls::Box* buildMetadataSection();
+
+    std::vector<GameItem> randomGames(size_t count);
 
     void updateHero(const GameItem* game);
     void setHeroBadge(const std::string& text);

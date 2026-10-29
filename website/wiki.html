@@ -517,7 +517,6 @@
     &lt;entry key="card_radius" value="12"/&gt;
     &lt;entry key="card_padding" value="10"/&gt;
     &lt;entry key="badge_radius" value="14"/&gt;
-    &lt;entry key="pill_height" value="44"/&gt;
     &lt;entry key="hero_size" value="180"/&gt;
     &lt;entry key="card_width" value="160"/&gt;
     &lt;entry key="card_image_height" value="120"/&gt;
@@ -544,14 +543,23 @@
     &lt;entry key="card_gap" value="10"/&gt;
     &lt;entry key="card_image_align" value="center"/&gt;
     &lt;entry key="row_cards" value="8"/&gt;
-    &lt;entry key="pill_padding" value="14"/&gt;
-    &lt;entry key="pill_icon" value="26"/&gt;
-    &lt;entry key="pill_icon_gap" value="8"/&gt;
-    &lt;entry key="pill_font" value="17"/&gt;
-    &lt;entry key="pill_gap" value="10"/&gt;
-    &lt;entry key="pill_per_row" value="6"/&gt;
-    &lt;entry key="pill_row_gap" value="14"/&gt;
-    &lt;entry key="pill_label_width" value="110"/&gt;
+    &lt;entry key="hero_width_pct" value="66.7"/&gt;      &lt;!-- Focus column, 2/3 --&gt;
+    &lt;entry key="meta_width_pct" value="33.3"/&gt;       &lt;!-- Details column, 1/3 --&gt;
+    &lt;entry key="column_gap" value="16"/&gt;
+    &lt;entry key="tile_size" value="96"/&gt;             &lt;!-- rounded-square platform tiles --&gt;
+    &lt;entry key="tile_radius" value="12"/&gt;
+    &lt;entry key="tile_padding" value="10"/&gt;
+    &lt;entry key="tile_icon" value="44"/&gt;
+    &lt;entry key="tile_gap" value="10"/&gt;
+    &lt;entry key="tile_name_gap" value="6"/&gt;
+    &lt;entry key="tile_name_font" value="14"/&gt;
+    &lt;entry key="tile_show_name" value="true"/&gt;     &lt;!-- false = icon-only tiles --&gt;
+    &lt;entry key="tile_scroll_behavior" value="centered"/&gt;  &lt;!-- centered | natural --&gt;
+    &lt;entry key="tile_indicator_gap" value="22"/&gt;
+    &lt;entry key="tile_image_align" value="center"/&gt;
+    &lt;entry key="random_games" value="10"/&gt;          &lt;!-- fills the area below --&gt;
+    &lt;entry key="random_per_row" value="5"/&gt;
+    &lt;entry key="random_row_gap" value="10"/&gt;
     &lt;entry key="page_padding" value="24"/&gt;
     &lt;entry key="hero_text_width" value="860"/&gt;
     &lt;entry key="badge_height" value="26"/&gt;
@@ -566,22 +574,26 @@
   &lt;/style&gt;
   &lt;sections&gt;
     &lt;section name="hero"/&gt;
+    &lt;section name="metadata"/&gt;
+    &lt;section name="platforms"/&gt;
+    &lt;section name="random"/&gt;
     &lt;section name="continue"/&gt;
     &lt;section name="favourites"/&gt;
-    &lt;section name="platforms"/&gt;
-    &lt;section name="metadata"/&gt;
   &lt;/sections&gt;
 &lt;/theme&gt;</code></pre>
             <p>
-              <code>layout="dashboard"</code> renders the home screen as a dashboard (hero card,
-              Continue playing, Favourites, Platforms pills, metadata grid). The
-              <code>&lt;sections&gt;</code> block controls order and visibility: delete a section
-              to hide it, reorder it to move it. Numeric <code>brls/…</code> style entries also
-              override Borealis metrics (e.g. <code>brls/sidebar/item_height</code>). The bundled
-              <strong>Aurora</strong> theme is the schema-2 reference.
+              <code>layout="dashboard"</code> renders the home screen as a dashboard: the Focus
+              hero column (<code>hero_width_pct</code>, 2/3 by default) sits next to the Details
+              column (<code>meta_width_pct</code>, 1/3), followed by a horizontally scrollable
+              Platforms row of rounded-square tiles (icon centered) and a Random picks row of
+              cards that fills the remaining height; Continue playing and Favourites are optional.
+              The <code>&lt;sections&gt;</code> block controls order and visibility: delete a
+              section to hide it, reorder it to move it. Numeric <code>brls/…</code> style entries
+              also override Borealis metrics (e.g. <code>brls/sidebar/item_height</code>). The
+              bundled <strong>Aurora</strong> theme is the schema-2 reference.
             </p>
             <p>
-              Optional theme assets: <code>icons/{systemId}.png</code> for the Platforms pill row
+              Optional theme assets: <code>icons/{systemId}.png</code> for the Platforms tiles
               and <code>header_logo.png</code> for the top bar.
             </p>
 

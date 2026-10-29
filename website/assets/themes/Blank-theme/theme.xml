@@ -6,7 +6,7 @@
 
   Optional schema-2 features (all optional — a colors-only theme still works):
     layout="dashboard"  home renders as a dashboard (see <sections> below)
-    <style>             design tokens: fonts, card radius/padding, pill badges, focus glow
+    <style>             design tokens: fonts, card radius/padding, platform tiles, focus glow
     <sections>          dashboard section order + visibility
 -->
 <theme name="Blank" variant="dark">
@@ -19,7 +19,6 @@
     <entry key="card_radius" value="12"/>
     <entry key="card_padding" value="10"/>
     <entry key="badge_radius" value="14"/>
-    <entry key="pill_height" value="44"/>
     <entry key="hero_size" value="180"/>
     <entry key="card_width" value="160"/>
     <entry key="card_image_height" value="120"/>
@@ -47,16 +46,24 @@
     <entry key="card_detail_font" value="14"/>
     <entry key="card_gap" value="10"/>
     <entry key="card_image_align" value="center"/>
-    <entry key="card_image_align" value="center"/>
     <entry key="row_cards" value="8"/>
-    <entry key="pill_padding" value="14"/>
-    <entry key="pill_icon" value="26"/>
-    <entry key="pill_icon_gap" value="8"/>
-    <entry key="pill_font" value="17"/>
-    <entry key="pill_gap" value="10"/>
-    <entry key="pill_per_row" value="6"/>
-    <entry key="pill_row_gap" value="14"/>
-    <entry key="pill_label_width" value="110"/>
+    <entry key="hero_width_pct" value="66.7"/>
+    <entry key="meta_width_pct" value="33.3"/>
+    <entry key="column_gap" value="16"/>
+    <entry key="tile_size" value="96"/>
+    <entry key="tile_radius" value="12"/>
+    <entry key="tile_padding" value="10"/>
+    <entry key="tile_icon" value="44"/>
+    <entry key="tile_gap" value="10"/>
+    <entry key="tile_name_gap" value="6"/>
+    <entry key="tile_name_font" value="14"/>
+    <entry key="tile_show_name" value="true"/>
+    <entry key="tile_scroll_behavior" value="centered"/>
+    <entry key="tile_indicator_gap" value="22"/>
+    <entry key="tile_image_align" value="center"/>
+    <entry key="random_games" value="10"/>
+    <entry key="random_per_row" value="5"/>
+    <entry key="random_row_gap" value="10"/>
     <entry key="badge_height" value="26"/>
     <entry key="badge_font" value="14"/>
     <entry key="badge_padding" value="12"/>
@@ -69,10 +76,11 @@
   </style>
   <sections>
     <section name="hero"/>
+    <section name="metadata"/>
+    <section name="platforms"/>
+    <section name="random"/>
     <section name="continue"/>
     <section name="favourites"/>
-    <section name="platforms"/>
-    <section name="metadata"/>
   </sections>
   -->
   <colors>
