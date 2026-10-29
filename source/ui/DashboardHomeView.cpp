@@ -270,7 +270,7 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float 
     cell->setHideHighlight(true);
 
     auto* image = new brls::Image();
-    image->setFixedSize(width - pad * 2, imageHeight);
+    image->setDimensions(width - pad * 2, imageHeight);
     image->setScalingType(brls::ImageScalingType::FIT);
     image->setImageAlign(brls::ImageAlignment::CENTER);
     const std::string art = game.meta.boxArtPath;
@@ -323,7 +323,7 @@ brls::Box* DashboardHomeView::makePill(const std::string& systemId)
     const std::string icon = theme.systemIconPath(systemId);
     if (!icon.empty()) {
         auto* image = new brls::Image();
-        image->setFixedSize(26.f, 26.f);
+        image->setDimensions(26.f, 26.f);
         image->setScalingType(brls::ImageScalingType::FIT);
         image->setImageFromFile(icon);
         pill->addView(image);
@@ -382,7 +382,7 @@ void DashboardHomeView::buildTopBar()
     const std::string logo = theme.headerLogoPath();
     if (!logo.empty()) {
         auto* image = new brls::Image();
-        image->setFixedSize(44.f, 44.f);
+        image->setDimensions(44.f, 44.f);
         image->setScalingType(brls::ImageScalingType::FIT);
         image->setImageFromFile(logo);
         row->addView(image);
@@ -442,7 +442,7 @@ void DashboardHomeView::buildHeroSection()
 
     // Hero card (focusable — shows the focused game, like the reference layout).
     heroImage_ = new brls::Image();
-    heroImage_->setFixedSize(heroSize - pad * 2, heroSize - pad * 2);
+    heroImage_->setDimensions(heroSize - pad * 2, heroSize - pad * 2);
     heroImage_->setScalingType(brls::ImageScalingType::FIT);
     heroImage_->setImageAlign(brls::ImageAlignment::CENTER);
 
@@ -584,7 +584,7 @@ void DashboardHomeView::buildMetadataSection()
         keyLabel->setTextColor(mutedColor());
         keyLabel->setSingleLine(true);
         keyLabel->setAnimated(false);
-        keyLabel->setFixedSize(110.f, 20.f);
+        keyLabel->setDimensions(110.f, 20.f);
         row->addView(keyLabel);
 
         auto* valueLabel = new brls::Label();
