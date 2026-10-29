@@ -57,6 +57,7 @@
     <entry key="card_gap" value="10"/>
     <entry key="card_image_align" value="center"/>
     <entry key="card_image_height" value="120"/>
+    <entry key="card_image_radius" value="8"/>
     <entry key="card_padding" value="10"/>
     <entry key="card_radius" value="12"/>
     <entry key="card_title_font" value="17"/>
@@ -77,11 +78,12 @@
     <entry key="hero_desc_lines" value="4"/>
     <entry key="hero_gap" value="20"/>
     <entry key="hero_image_align" value="center"/>
+    <entry key="hero_image_radius" value="8"/>
     <entry key="hero_image_width" value="140"/>
     <entry key="hero_meta_font" value="14"/>
     <entry key="hero_size" value="180"/>
     <entry key="hero_text_width" value="860"/>
-    <entry key="hero_tile_padding" value="6"/>
+    <entry key="hero_tile_padding" value="4"/>
     <entry key="hero_tile_radius" value="12"/>
     <entry key="hero_title_font" value="30"/>
     <entry key="hero_width_pct" value="66.7"/>
@@ -99,6 +101,7 @@
     <entry key="section_gap" value="14"/>
     <entry key="tile_gap" value="10"/>
     <entry key="tile_icon" value="40"/>
+    <entry key="tile_icon_radius" value="4"/>
     <entry key="tile_image_align" value="center"/>
     <entry key="tile_indicator_gap" value="22"/>
     <entry key="tile_name_font" value="13"/>

@@ -76,6 +76,16 @@ brls::ScrollingBehavior scrollBehavior(const char* key, brls::ScrollingBehavior 
 
 // Height needed to wrap a tile precisely around the loaded image at `width`
 // (its own aspect ratio), or `fallback` when the image dimensions are unknown.
+// Corner radius for an image sitting inside a rounded card: the concentric radius
+// (card radius - padding) keeps the two arcs parallel, with a floor so the cover still
+// reads as rounded when the padding is large.
+float imageRadius(const char* key, float cardRadius, float padding, float minRadius)
+{
+    if (ThemeManager::instance().hasStyle(key))
+        return ThemeManager::instance().styleNum(key, minRadius);
+    return std::clamp(cardRadius - padding, minRadius, cardRadius);
+}
+
 float wrappedImageHeight(brls::Image* image, float width, float fallback)
 {
     const float ow = image->getOriginalImageWidth();
@@ -391,6 +401,7 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float 
     auto* image = new brls::Image();
     const float innerWidth = width - pad * 2;
     image->setWidth(innerWidth);
+    image->setCornerRadius(imageRadius("card_image_radius", radius, pad, 4.f));
     image->setScalingType(brls::ImageScalingType::FIT);
     image->setImageAlign(imageAlign("card_image_align", brls::ImageAlignment::CENTER));
 
@@ -457,6 +468,7 @@ brls::Box* DashboardHomeView::makeTile(const std::string& systemId)
     if (!icon.empty()) {
         auto* image = new brls::Image();
         image->setDimensions(iconSize, iconSize);
+        image->setCornerRadius(imageRadius("tile_icon_radius", radius, pad, 4.f));
         image->setScalingType(brls::ImageScalingType::FIT);
         image->setImageAlign(imageAlign("tile_image_align", brls::ImageAlignment::CENTER));
         image->setImageFromFile(icon);
@@ -581,12 +593,13 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
 {
     auto& theme = ThemeManager::instance();
     const float radius = tokenChain("hero_tile_radius", "card_radius", 12.f);
-    const float pad = token("hero_tile_padding", 6.f);
+    const float pad = token("hero_tile_padding", 4.f);
     const float heroImageW = token("hero_image_width", 140.f);
 
     // Hero tile (focusable): wraps tightly around the shape of the cover image.
     heroImage_ = new brls::Image();
     heroImage_->setWidth(heroImageW);
+    heroImage_->setCornerRadius(imageRadius("hero_image_radius", radius, pad, 4.f));
     heroImage_->setScalingType(brls::ImageScalingType::FIT);
     heroImage_->setImageAlign(imageAlign("hero_image_align", brls::ImageAlignment::CENTER));
 

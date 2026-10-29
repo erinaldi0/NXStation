@@ -543,17 +543,20 @@
     &lt;entry key="card_detail_font" value="14"/&gt;
     &lt;entry key="card_gap" value="10"/&gt;
     &lt;entry key="card_image_align" value="center"/&gt;
+    &lt;entry key="card_image_radius" value="8"/&gt;        &lt;!-- rounded cover corners --&gt;
     &lt;entry key="row_cards" value="8"/&gt;
     &lt;entry key="hero_width_pct" value="66.7"/&gt;      &lt;!-- Focus column, 2/3 --&gt;
     &lt;entry key="meta_width_pct" value="33.3"/&gt;       &lt;!-- Details column, 1/3 --&gt;
     &lt;entry key="column_gap" value="16"/&gt;
     &lt;entry key="hero_image_width" value="140"/&gt;      &lt;!-- tiles wrap around the cover shape --&gt;
-    &lt;entry key="hero_tile_padding" value="6"/&gt;
+    &lt;entry key="hero_tile_padding" value="4"/&gt;      &lt;!-- tight ring around the cover --&gt;
     &lt;entry key="hero_tile_radius" value="12"/&gt;
+    &lt;entry key="hero_image_radius" value="8"/&gt;       &lt;!-- rounded cover corners --&gt;
     &lt;entry key="tile_size" value="112"/&gt;             &lt;!-- rounded-square platform tiles --&gt;
     &lt;entry key="tile_radius" value="12"/&gt;
     &lt;entry key="tile_padding" value="8"/&gt;
     &lt;entry key="tile_icon" value="40"/&gt;
+    &lt;entry key="tile_icon_radius" value="4"/&gt;         &lt;!-- defaults to tile_radius - tile_padding --&gt;
     &lt;entry key="tile_gap" value="10"/&gt;
     &lt;entry key="tile_name_gap" value="6"/&gt;
     &lt;entry key="tile_name_font" value="13"/&gt;
@@ -593,6 +596,9 @@
               Platforms row of rounded-square tiles (icon centered, only the platforms that
               contain at least one game are listed) and a Random picks row of
               cards that fills the remaining height; Continue playing and Favourites are optional.
+              Covers are wrapped by their own aspect ratio and drawn with rounded corners
+              (`hero_image_radius`, `card_image_radius`, `tile_icon_radius`; default = the parent
+              radius minus its padding).
               The <code>&lt;sections&gt;</code> block controls order and visibility: delete a
               section to hide it, reorder it to move it. Numeric <code>brls/…</code> style entries
               also override Borealis metrics (e.g. <code>brls/sidebar/item_height</code>). The

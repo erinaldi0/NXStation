@@ -47,17 +47,20 @@
     <entry key="card_detail_font" value="14"/>
     <entry key="card_gap" value="10"/>
     <entry key="card_image_align" value="center"/>
+    <entry key="card_image_radius" value="8"/>
     <entry key="row_cards" value="8"/>
     <entry key="hero_width_pct" value="66.7"/>
     <entry key="meta_width_pct" value="33.3"/>
     <entry key="column_gap" value="16"/>
     <entry key="hero_image_width" value="140"/>
-    <entry key="hero_tile_padding" value="6"/>
+    <entry key="hero_tile_padding" value="4"/>
     <entry key="hero_tile_radius" value="12"/>
+    <entry key="hero_image_radius" value="8"/>
     <entry key="tile_size" value="112"/>
     <entry key="tile_radius" value="12"/>
     <entry key="tile_padding" value="8"/>
     <entry key="tile_icon" value="40"/>
+    <entry key="tile_icon_radius" value="4"/>
     <entry key="tile_gap" value="10"/>
     <entry key="tile_name_gap" value="6"/>
     <entry key="tile_name_font" value="13"/>
