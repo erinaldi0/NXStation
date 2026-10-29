@@ -92,7 +92,7 @@
     <entry key="pill_icon_gap" value="8"/>
     <entry key="pill_label_width" value="110"/>
     <entry key="pill_padding" value="14"/>
-    <entry key="pill_per_row" value="12"/>
+    <entry key="pill_per_row" value="6"/>
     <entry key="pill_row_gap" value="14"/>
     <entry key="row_cards" value="8"/>
     <entry key="section_gap" value="14"/>

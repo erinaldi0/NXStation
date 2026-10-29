@@ -333,7 +333,7 @@ PALETTES = {
         "pill_font": "17", "pill_gap": "10",
         "pill_per_row": "6", "pill_row_gap": "14", "pill_label_width": "110",
         "page_padding": "24", "hero_text_width": "860",
-        "pill_per_row": "12", "pill_row_gap": "14", "pill_label_width": "110",
+        "pill_per_row": "6", "pill_row_gap": "14", "pill_label_width": "110",
         "page_padding": "24", "hero_text_width": "860",
         "badge_height": "26", "badge_font": "14", "badge_padding": "12",
         "meta_key_width": "110", "meta_row_gap": "6",
