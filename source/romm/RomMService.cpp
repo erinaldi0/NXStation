@@ -249,6 +249,7 @@ void RomMService::populateVirtualLibrary() {
     // Cloud-only rows are also distributed into the real system sections, so a RomM game
     // shows up under its own system with the cloud badge (A downloads, A again plays).
     std::map<std::string, std::vector<GameItem>> cloudBySystem;
+    size_t insertedRows = 0;
 
     for (const auto& entry : library_->entries()) {
         GameItem g;
@@ -284,11 +285,15 @@ void RomMService::populateVirtualLibrary() {
 
         if (g.cloudAvailable && !g.systemId.empty()) {
             cloudBySystem[g.systemId].push_back(g);
-        } else if (!g.systemId.empty()) {
+        } else if (!g.systemId.empty() && sf::Config::instance().findSystem(g.systemId)) {
             // Already-downloaded games are no longer in cloudBySystem, so mergeCloudGames
             // cannot bring an old cloud-only row up to date; update the row directly so the
             // system section shows "Downloaded" instead of the cloud badge right after a download.
-            AppState::instance().refreshDownloadedRow(g.systemId, g);
+            // A game downloaded after the last scan has no row in the persisted index cache,
+            // so refreshDownloadedRow inserts it; without that it would survive only in Last
+            // Played after a restart.
+            if (!AppState::instance().refreshDownloadedRow(g.systemId, g))
+                ++insertedRows;
         }
 
         items.push_back(std::move(g));
@@ -304,6 +309,13 @@ void RomMService::populateVirtualLibrary() {
         AppState::instance().mergeCloudGames(systemId);
     }
 
+    // Remove duplicate rows for the same file (a scanned row and a RomM row can coexist
+    // when the RomM id was lost from the persisted cache), so lists do not grow on every
+    // startup.
+    size_t deduped = 0;
+    for (const auto& sys : sf::Config::instance().systems())
+        deduped += AppState::instance().dedupeSystemGames(sys.id);
+
     std::stable_sort(items.begin(), items.end(), byTitle);
 
     const size_t total = items.size();
@@ -312,6 +324,15 @@ void RomMService::populateVirtualLibrary() {
 
     AppState::instance().setGames(kRomMSystemId, std::move(items));
     AppState::instance().rebuildVirtualSections();
+
+    if (insertedRows > 0 || deduped > 0) {
+        // Persist rows that were inserted or cleaned up so the sections stay stable across
+        // restarts without a full rescan.
+        AppState::instance().persistLibraryCache();
+        SF_LOG_I("RomM", "Virtual library: added %zu missing row(s), removed %zu duplicate row(s)",
+                 insertedRows, deduped);
+    }
+
     SF_LOG_I("RomM", "Virtual library: %zu entries (%zu downloaded)", total, downloaded);
 }
 

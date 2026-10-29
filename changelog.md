@@ -23,6 +23,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The ROM mapping file accepts a top-level JSON array as well as `{"mappings": [...]}`.
 - **Mappings lost after restart**: legacy installs stored the ROM mapping file under the library-cache name, so `saveCache()` overwrote it on the next startup and **Sync Now** reported `Nothing to sync yet` even for downloaded ROMs. The mapping file now has its own name (`romm_mappings.json`); surviving legacy data is migrated on load, and mappings for downloaded ROMs are rebuilt from the library cache entries.
 - `HTTP 401` errors now state that the token is invalid/expired and needs re-pairing.
+- **Downloaded games vanished from their system section after a restart**: the persisted ROM index cache only stores rows from the last scan, so a game downloaded after that scan had nothing to restore on startup. `refreshDownloadedRow` only updated an existing row, so the game survived only in Last Played. Missing rows are now inserted and persisted, so downloads stay in their system section across restarts without a rescan.
+- **Duplicate rows for the same game grew on every startup**: `library_index.json` did not persist `rommRomId`/`fromRomM`, so a restored row could never be matched again and each startup inserted another copy. The cache now persists those fields, `refreshDownloadedRow` also matches by path or file name, and a startup dedupe pass merges scanned rows with RomM rows per system (flags/metadata merged into the survivor).
+- **Manual scan erased downloaded RomM games**: `scanSystem` replaced each system's list with scan results only, so RomM rows for files the scanner cannot match (extension not in the system's configured list) vanished after **Scan Games**. Scanned rows are kept, but downloaded RomM rows whose file still exists are now preserved and persisted through the scan.
 
 ### Notes
 
