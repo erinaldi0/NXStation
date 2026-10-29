@@ -15,6 +15,7 @@
 #include "ui/ThemeManager.hpp"
 #include "ui/UiSfx.hpp"
 #include "util/ActionLog.hpp"
+#include "util/FileSystem.hpp"
 #include "util/NavigationState.hpp"
 #include "util/Placeholders.hpp"
 #include "util/VirtualSystems.hpp"
@@ -79,6 +80,24 @@ brls::ScrollingBehavior scrollBehavior(const char* key, brls::ScrollingBehavior 
 // Corner radius for an image sitting inside a rounded card: the concentric radius
 // (card radius - padding) keeps the two arcs parallel, with a floor so the cover still
 // reads as rounded when the padding is large.
+// Resolve the cover for an image view. Always sets something: a game with no scraped
+// art falls back to the theme placeholder, then to the bundled one. Without this the
+// tile would keep the previously loaded texture.
+void setCoverArt(brls::Image* image, const GameItem& game)
+{
+    const std::string art = game.meta.boxArtPath;
+    if (!art.empty() && FileSystem::exists(art)) {
+        image->setImageFromFile(art);
+        return;
+    }
+
+    const std::string custom = sf::gameArtPlaceholderPath();
+    if (!custom.empty())
+        image->setImageFromFile(custom);
+    else
+        image->setImageFromRes(sf::gameArtPlaceholderRes());
+}
+
 float imageRadius(const char* key, float cardRadius, float padding, float minRadius)
 {
     if (ThemeManager::instance().hasStyle(key))
@@ -220,6 +239,9 @@ void DashboardCell::onFocusLost()
 
 DashboardHomeView::DashboardHomeView()
 {
+    rng_.seed(static_cast<unsigned>(
+        std::chrono::steady_clock::now().time_since_epoch().count()));
+
     this->setAxis(brls::Axis::COLUMN);
     this->setGrow(1.f);
 
@@ -318,8 +340,19 @@ void DashboardHomeView::onCellFocused(DashboardCell* cell)
         playNavSfx();
 
     if (cell->isSystemCell()) {
+        // Which game the Focus block shows for a platform tile is a theme behavior:
+        // tile_focus_pick = "random" (default, a game picked inside that platform) or
+        // "first" (the top of its list).
         const auto& games = AppState::instance().gamesFor(cell->systemId());
-        updateHero(games.empty() ? nullptr : &games.front());
+        if (games.empty()) {
+            updateHero(nullptr);
+            return;
+        }
+
+        if (tokenStr("tile_focus_pick", "random") == "first")
+            updateHero(&games.front());
+        else
+            updateHero(pickRandomGame(cell->systemId()));
     } else {
         const auto& games = AppState::instance().gamesFor(cell->systemId());
         const GameItem* game = nullptr;
@@ -343,7 +376,13 @@ void DashboardHomeView::openCell(DashboardCell* cell)
     NavigationState::setLastSystem(cell->systemId());
 
     const std::string systemId = cell->systemId();
-    const size_t focus = cell->isSystemCell() ? 0 : gameIndexForPath(systemId, cell->romPath());
+    size_t focus = gameIndexForPath(systemId, cell->romPath());
+    if (cell->isSystemCell()) {
+        // Land on the game the Focus block is showing for this platform.
+        focus = (heroGame_.systemId == systemId && !heroGame_.path.empty())
+                    ? gameIndexForPath(systemId, heroGame_.path)
+                    : 0;
+    }
     brls::sync([systemId, focus]() { PushedActivity::push(new GameListView(systemId, focus)); });
 }
 
@@ -405,11 +444,7 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float 
     image->setScalingType(brls::ImageScalingType::FIT);
     image->setImageAlign(imageAlign("card_image_align", brls::ImageAlignment::CENTER));
 
-    const std::string art = game.meta.boxArtPath;
-    const std::string path =
-        firstExistingPath({art, theme.boxPlaceholderPath(), sf::gameArtPlaceholderPath()});
-    if (!path.empty())
-        image->setImageFromFile(path);
+    setCoverArt(image, game);
 
     // Wrap the card precisely around the cover shape when its aspect ratio is known.
     // imageHeight is the fallback/cap for cards that should not grow.
@@ -605,11 +640,14 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
 
     auto& games = AppState::instance().gamesFor(systemIds_.empty() ? std::string() : systemIds_.front());
 
-    const GameItem heroSeed = games.empty() ? GameItem{} : games.front();
-    const std::string seedPath = firstExistingPath(
-        {heroSeed.meta.boxArtPath, theme.boxPlaceholderPath(), sf::gameArtPlaceholderPath()});
-    if (!seedPath.empty())
-        heroImage_->setImageFromFile(seedPath);
+    // The hero starts on the game the theme's tile_focus_pick behavior would show for
+    // the first platform, so the tile and the Focus block agree from the start.
+    const GameItem heroSeed = games.empty()
+        ? GameItem{}
+        : (tokenStr("tile_focus_pick", "random") == "first"
+               ? games.front()
+               : *pickRandomGame(systemIds_.front()));
+    setCoverArt(heroImage_, heroSeed);
     heroImage_->setHeight(wrappedImageHeight(heroImage_, heroImageW,
                                              token("hero_image_height", heroImageW * 1.4f)));
 
@@ -686,7 +724,7 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     firstFocusable_ = card;
     focusTargets_[card->systemId()] = card;
 
-    updateHero(games.empty() ? nullptr : &games.front());
+    updateHero(games.empty() ? nullptr : &heroSeed);
     return section;
 }
 
@@ -723,6 +761,14 @@ brls::Box* DashboardHomeView::buildGamesSection(const std::string& headerTitle,
     return section;
 }
 
+const GameItem* DashboardHomeView::pickRandomGame(const std::string& systemId)
+{
+    const auto& games = AppState::instance().gamesFor(systemId);
+    if (games.empty())
+        return nullptr;
+    return &games[std::uniform_int_distribution<size_t>(0, games.size() - 1)(rng_)];
+}
+
 std::vector<GameItem> DashboardHomeView::randomGames(size_t count)
 {
     std::vector<GameItem> pool;
@@ -733,9 +779,7 @@ std::vector<GameItem> DashboardHomeView::randomGames(size_t count)
     if (pool.empty())
         return {};
 
-    std::mt19937 rng(static_cast<unsigned>(
-        std::chrono::steady_clock::now().time_since_epoch().count()));
-    std::shuffle(pool.begin(), pool.end(), rng);
+    std::shuffle(pool.begin(), pool.end(), rng_);
     if (pool.size() > count)
         pool.resize(count);
     return pool;
@@ -926,11 +970,7 @@ void DashboardHomeView::updateHero(const GameItem* game)
 
     if (heroImage_) {
         const float w = token("hero_image_width", 140.f);
-        const std::string path = firstExistingPath(
-            {game ? game->meta.boxArtPath : "", ThemeManager::instance().boxPlaceholderPath(),
-             sf::gameArtPlaceholderPath()});
-        if (!path.empty())
-            heroImage_->setImageFromFile(path);
+        setCoverArt(heroImage_, game ? *game : GameItem{});
         // The tile adapts to the newly focused cover's shape.
         heroImage_->setHeight(wrappedImageHeight(heroImage_, w,
                                                  token("hero_image_height", w * 1.4f)));

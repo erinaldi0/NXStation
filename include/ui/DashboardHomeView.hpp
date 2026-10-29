@@ -3,6 +3,7 @@
 #include "app/Models.hpp"
 
 #include <borealis.hpp>
+#include <random>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -89,6 +90,7 @@ private:
     brls::Box* buildMetadataSection();
 
     std::vector<GameItem> randomGames(size_t count);
+    const GameItem* pickRandomGame(const std::string& systemId);
 
     void updateHero(const GameItem* game);
     void setHeroBadge(const std::string& text);
@@ -108,6 +110,7 @@ private:
     brls::Box* heroBadgeRow_ = nullptr;
     std::unordered_map<std::string, brls::Label*> metaLabels_;
     GameItem heroGame_;
+    std::mt19937 rng_;
 };
 
 } // namespace sf::ui

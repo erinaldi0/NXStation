@@ -337,6 +337,7 @@ PALETTES = {
         "tile_gap": "10", "tile_name_gap": "6", "tile_name_font": "13", "tile_name_lines": "2",
         "tile_show_name": "true", "tile_scroll_behavior": "centered",
         "tile_indicator_gap": "22", "tile_image_align": "center",
+        "tile_focus_pick": "random",
         "random_games": "10", "random_per_row": "5", "random_row_gap": "10",
         "badge_height": "26", "badge_font": "14", "badge_padding": "12",
         "meta_key_width": "110", "meta_row_gap": "6",

@@ -99,6 +99,7 @@
     <entry key="random_row_gap" value="10"/>
     <entry key="row_cards" value="8"/>
     <entry key="section_gap" value="14"/>
+    <entry key="tile_focus_pick" value="random"/>
     <entry key="tile_gap" value="10"/>
     <entry key="tile_icon" value="40"/>
     <entry key="tile_icon_radius" value="4"/>
