@@ -330,7 +330,7 @@ PALETTES = {
         "row_cards": "8",
         "page_padding": "24", "hero_text_width": "860",
         "hero_width_pct": "66.7", "meta_width_pct": "33.3", "column_gap": "16",
-        "hero_image_width": "140", "hero_tile_padding": "4", "hero_tile_radius": "12",
+        "hero_image_width": "140", "hero_image_max_aspect": "1", "hero_tile_padding": "4", "hero_tile_radius": "12",
         "hero_image_radius": "8",
         "tile_size": "112", "tile_radius": "12", "tile_padding": "8", "tile_icon": "40",
         "tile_icon_radius": "4",

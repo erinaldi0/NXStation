@@ -79,6 +79,7 @@
     <entry key="hero_fixed_height" value="250"/>
     <entry key="hero_gap" value="20"/>
     <entry key="hero_image_align" value="center"/>
+    <entry key="hero_image_max_aspect" value="1"/>
     <entry key="hero_image_radius" value="8"/>
     <entry key="hero_image_width" value="140"/>
     <entry key="hero_meta_font" value="14"/>

@@ -56,6 +56,7 @@
     <entry key="meta_width_pct" value="33.3"/>
     <entry key="column_gap" value="16"/>
     <entry key="hero_image_width" value="140"/>
+    <entry key="hero_image_max_aspect" value="1"/>
     <entry key="hero_tile_padding" value="4"/>
     <entry key="hero_tile_radius" value="12"/>
     <entry key="hero_image_radius" value="8"/>
