@@ -744,7 +744,7 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     auto* section = new brls::Box();
     section->setAxis(brls::Axis::COLUMN);
     section->setPadding(0, 0, token("section_gap", 14.f), 0);
-    section->addView(makeSectionHeader("Last Played", {}));
+    section->addView(makeSectionHeader("Focus", {}));
     section->addView(row);
 
     firstFocusable_ = card;
