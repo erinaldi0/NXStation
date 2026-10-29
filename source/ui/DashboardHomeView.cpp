@@ -699,12 +699,11 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     middle->setWidth(textWidth);
     middle->setMarginLeft(token("hero_gap", 20.f));
 
-    // When hero_fixed_height is set, constrain the middle column so badges
-    // don't push the layout. The description truncates at hero_desc_lines.
+    // When hero_fixed_height is set, the section gets a fixed height and the row
+    // grows to fill the remaining space. The middle column then fills the row height.
+    // This prevents badges/description from pushing the layout.
     if (fixedHeight > 0.f) {
-        // Estimate header height: section header (~30) + section_gap (14) = ~44
-        // Row gets the rest. Middle column matches row height.
-        middle->setHeight(fixedHeight - 44.f);
+        middle->setGrow(1.f);
     }
 
     heroTitle_ = new brls::Label();
@@ -726,6 +725,9 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     heroBadgeRow_->setAxis(brls::Axis::ROW);
     heroBadgeRow_->setPadding(token("hero_badge_pad", 10.f), 0, token("hero_badge_pad", 10.f), 0);
     heroBadgeRow_->setWidth(textWidth);
+    // Cap badge row height so multiple badges don't push description down.
+    const float badgeRowHeight = token("badge_height", 26.f) + token("hero_badge_pad", 10.f) * 2;
+    heroBadgeRow_->setHeight(badgeRowHeight);
     middle->addView(heroBadgeRow_);
 
     const int descLines = std::max(1, static_cast<int>(token("hero_desc_lines", 4.f)));
@@ -737,10 +739,14 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     desc->setLineHeight(1.4f);
     desc->setMaxLines(descLines);
     desc->setVerticalAlign(brls::VerticalAlign::TOP);
-    desc->setWidth(textWidth); // constrained width => real wrapping, height grows
+    desc->setWidth(textWidth);
     desc->setAnimated(false);
+    // Description fills remaining space in middle, but truncates at maxLines.
+    if (fixedHeight > 0.f) {
+        desc->setGrow(1.f);
+    }
     if (ThemeManager::instance().hasStyle("hero_desc_height"))
-        desc->setMinHeight(token("hero_desc_height", 90.f)); // keeps the block stable for short descriptions
+        desc->setMinHeight(token("hero_desc_height", 90.f));
     heroDescription_ = desc;
     middle->addView(desc);
 
@@ -750,9 +756,9 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     row->addView(card);
     row->addView(middle);
 
-    // Constrain row height when hero_fixed_height is set
+    // Row grows to fill section (minus header) when fixed height is set.
     if (fixedHeight > 0.f) {
-        row->setHeight(fixedHeight - 44.f); // minus header
+        row->setGrow(1.f);
     }
 
     auto* section = new brls::Box();
