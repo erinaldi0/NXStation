@@ -29,6 +29,8 @@
     <entry key="badge_bg" value="#301C48"/>
     <entry key="brand_subtitle" value="Your retro collection"/>
     <!-- Per-component sizing: every value falls back to the shared tokens above. -->
+    <entry key="page_padding" value="24"/>
+    <entry key="hero_text_width" value="860"/>
     <entry key="topbar_logo" value="44"/>
     <entry key="topbar_gap" value="18"/>
     <entry key="brand_font" value="28"/>
@@ -52,6 +54,9 @@
     <entry key="pill_icon_gap" value="8"/>
     <entry key="pill_font" value="17"/>
     <entry key="pill_gap" value="10"/>
+    <entry key="pill_per_row" value="6"/>
+    <entry key="pill_row_gap" value="14"/>
+    <entry key="pill_label_width" value="110"/>
     <entry key="badge_height" value="26"/>
     <entry key="badge_font" value="14"/>
     <entry key="badge_padding" value="12"/>

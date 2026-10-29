@@ -77,18 +77,23 @@
     <entry key="hero_image_align" value="center"/>
     <entry key="hero_meta_font" value="14"/>
     <entry key="hero_size" value="180"/>
+    <entry key="hero_text_width" value="860"/>
     <entry key="hero_title_font" value="30"/>
     <entry key="hint_font" value="14"/>
     <entry key="meta_key_font" value="13"/>
     <entry key="meta_key_width" value="110"/>
     <entry key="meta_row_gap" value="6"/>
     <entry key="meta_value_font" value="15"/>
+    <entry key="page_padding" value="24"/>
     <entry key="pill_font" value="17"/>
     <entry key="pill_gap" value="10"/>
     <entry key="pill_height" value="44"/>
     <entry key="pill_icon" value="26"/>
     <entry key="pill_icon_gap" value="8"/>
+    <entry key="pill_label_width" value="110"/>
     <entry key="pill_padding" value="14"/>
+    <entry key="pill_per_row" value="12"/>
+    <entry key="pill_row_gap" value="14"/>
     <entry key="row_cards" value="8"/>
     <entry key="section_gap" value="14"/>
     <entry key="topbar_gap" value="18"/>

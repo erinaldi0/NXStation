@@ -361,6 +361,7 @@ brls::Box* DashboardHomeView::makePill(const std::string& systemId)
     auto* label = new brls::Label();
     label->setText(browser::systemDisplayName(systemId));
     label->setFontSize(tokenChain("pill_font", "font_body", 17.f));
+    label->setMaxWidth(token("pill_label_width", 110.f));
     label->setTextColor(theme.color("nxstation/favorite_text"));
     label->setSingleLine(true);
     label->setAnimated(false);
@@ -491,6 +492,7 @@ void DashboardHomeView::buildHeroSection()
     middle->setAxis(brls::Axis::COLUMN);
     middle->setGrow(1.f);
     middle->setMarginLeft(token("hero_gap", 20.f));
+    middle->setMaxWidth(token("hero_text_width", 860.f));
 
     heroTitle_ = new brls::Label();
     heroTitle_->setFontSize(tokenChain("hero_title_font", "font_title", 28.f));
@@ -576,20 +578,27 @@ void DashboardHomeView::buildPlatformsSection()
     auto* header = makeSectionHeader("Platforms", std::to_string(platforms.size()));
     this->addView(header);
 
-    auto* row = new brls::Box();
-    row->setAxis(brls::Axis::ROW);
-    row->setAlignItems(brls::AlignItems::CENTER);
-    row->setPadding(0, 0, token("section_gap", 14.f), 0);
+    const size_t perRow = static_cast<size_t>(token("pill_per_row", 6.f));
+    const float rowGap  = token("pill_row_gap", token("section_gap", 14.f));
 
-    for (const auto& id : platforms) {
-        auto* pill = makePill(id);
-        pill->setMarginRight(token("pill_gap", 10.f));
-        if (!firstFocusable_)
-            firstFocusable_ = pill;
-        row->addView(pill);
+    size_t index = 0;
+    while (index < platforms.size()) {
+        auto* row = new brls::Box();
+        row->setAxis(brls::Axis::ROW);
+        row->setAlignItems(brls::AlignItems::CENTER);
+        row->setPadding(0, 0, rowGap, 0);
+
+        for (size_t i = 0; i < perRow && index < platforms.size(); ++i, ++index) {
+            const std::string& id = platforms[index];
+            auto* pill = makePill(id);
+            pill->setMarginRight(token("pill_gap", 10.f));
+            if (!firstFocusable_)
+                firstFocusable_ = pill;
+            row->addView(pill);
+        }
+
+        this->addView(row);
     }
-
-    this->addView(row);
 }
 
 void DashboardHomeView::buildMetadataSection()
@@ -702,6 +711,9 @@ void DashboardHomeView::rebuild()
     focusTargets_.clear();
     firstFocusable_ = nullptr;
     this->clearViews(true);
+
+    const float pagePad = token("page_padding", 24.f);
+    this->setPadding(pagePad, pagePad, pagePad, pagePad);
 
     buildTopBar();
 
