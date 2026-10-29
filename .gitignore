@@ -3,6 +3,7 @@ build/
 build_switch/
 build_test/
 build_desktop/
+build_libromfs_generator/
 cmake-build-*/
 .tools/
 
