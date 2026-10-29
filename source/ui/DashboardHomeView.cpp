@@ -114,6 +114,15 @@ float wrappedImageHeight(brls::Image* image, float width, float fallback)
     return fallback;
 }
 
+float wrappedImageWidth(brls::Image* image, float height, float fallback)
+{
+    const float ow = image->getOriginalImageWidth();
+    const float oh = image->getOriginalImageHeight();
+    if (ow > 0 && oh > 0)
+        return height * ow / oh;
+    return fallback;
+}
+
 NVGcolor mutedColor()
 {
     return ThemeManager::instance().color("nxstation/muted_text");
@@ -159,7 +168,7 @@ void MultilineLabel::onLayout()
 {
     brls::Label::onLayout();
 
-    if (maxLines_ <= 0 || trimming_)
+    if (maxLines_ <= 0)
         return;
 
     const float width = this->getWidth();
@@ -171,7 +180,16 @@ void MultilineLabel::onLayout()
         return;
 
     const std::string text = this->getFullText();
-    if (text.empty() || text == measuredText_)
+    if (text.empty())
+        return;
+
+    // If the text changed (new full text from updateHero), reset trimming state
+    // so we re-measure and truncate the new text. measuredText_ holds the last
+    // truncated version, so a mismatch means the content was replaced.
+    if (text != measuredText_)
+        trimming_ = false;
+
+    if (trimming_)
         return;
 
     nvgFontSize(vg, this->getFontSize());
@@ -811,49 +829,133 @@ brls::Box* DashboardHomeView::buildRandomSection()
 
     const float gap = tokenChain("random_gap", "card_gap", 10.f);
     const float cardImage = token("card_image_height", 120.f);
+    const float pad = token("card_padding", 10.f);
+    const float titleFont = tokenChain("card_title_font", "font_body", 17.f);
+    const float detailFont = tokenChain("card_detail_font", "font_meta", 14.f);
+    const float titleHeight = titleFont * 1.3f;
+    const float detailHeight = detailFont * 1.3f;
 
-    // Card width: the theme can pin it, otherwise it is what `random_per_row` cards need
-    // to fill the visible width - the rest of the row is reached by scrolling.
-    float cardWidth;
-    if (ThemeManager::instance().hasStyle("random_card_width"))
-        cardWidth = token("random_card_width", 224.f);
-    else {
-        const float inner = 1280.f - token("page_padding", 24.f) * 2.f;
-        cardWidth = (inner - static_cast<float>(visible) * gap) / static_cast<float>(visible);
+    // If the theme pins a fixed card width, use the old uniform-width behavior.
+    if (ThemeManager::instance().hasStyle("random_card_width")) {
+        const float cardWidth = token("random_card_width", 224.f);
+
+        std::vector<brls::Box*> cards;
+        float tallest = 0.f;
+        for (const auto& game : games) {
+            const std::string detail = game.systemId.empty()
+                                           ? game.meta.genre
+                                           : systemAcronym(game.systemId);
+            float natural = 0.f;
+            auto* card = makeCard(game, cardWidth, cardImage, detail, false, &natural);
+            card->setMarginRight(gap);
+            cards.push_back(card);
+            tallest = std::max(tallest, natural);
+        }
+
+        if (ThemeManager::instance().hasStyle("random_card_height"))
+            tallest = std::min(tallest, token("random_card_height", tallest));
+
+        auto* content = new brls::Box();
+        content->setAxis(brls::Axis::ROW);
+        content->setAlignItems(brls::AlignItems::FLEX_START);
+
+        for (auto* card : cards) {
+            card->setHeight(tallest);
+            if (!firstFocusable_)
+                firstFocusable_ = card;
+            content->addView(card);
+        }
+
+        auto* frame = new brls::HScrollingFrame();
+        frame->setWidthPercentage(100.f);
+        frame->setHeight(tallest + tokenChain("random_indicator_gap", "tile_indicator_gap", 22.f));
+        frame->setScrollingBehavior(scrollBehavior("random_scroll_behavior",
+                                                   brls::ScrollingBehavior::CENTERED));
+        frame->setContentView(content);
+
+        section->addView(frame);
+        return section;
     }
 
-    // Build the cards first so the frame can be sized around the tallest cover, then give
-    // every card that height so the row reads as a grid. Everything is fixed-height here:
-    // the previous grow factor made Yoga shrink the section and the content overlapped the
-    // Platforms row.
-    std::vector<brls::Box*> cards;
-    float tallest = 0.f;
+    // Adaptive-width mode: each card gets a width that fits its cover at a common height.
+    // 1) Create a provisional card for each game to load the cover and measure its aspect ratio.
+    struct ProvisionalCard {
+        GameItem game;
+        std::string detail;
+        brls::Box* card;
+        brls::Image* image;
+        float aspectRatio; // width / height of the cover
+        float naturalHeight;
+    };
+    std::vector<ProvisionalCard> provisional;
+
+    // Use a provisional width based on random_per_row to trigger image loading.
+    const float inner = 1280.f - token("page_padding", 24.f) * 2.f;
+    const float provisionalWidth = (inner - static_cast<float>(visible) * gap) / static_cast<float>(visible);
+
     for (const auto& game : games) {
         const std::string detail = game.systemId.empty()
                                        ? game.meta.genre
                                        : systemAcronym(game.systemId);
+
+        // Create a temporary card to load the image and get its dimensions.
+        auto* tempCard = makeCard(game, provisionalWidth, cardImage, detail, false, nullptr);
+        // The image is the first child of the cell.
+        brls::Image* tempImage = nullptr;
+        for (auto* child : tempCard->getChildren()) {
+            if (dynamic_cast<brls::Image*>(child)) {
+                tempImage = static_cast<brls::Image*>(child);
+                break;
+            }
+        }
+
+        float aspectRatio = 0.75f; // fallback 3:4 portrait
+        if (tempImage) {
+            const float ow = tempImage->getOriginalImageWidth();
+            const float oh = tempImage->getOriginalImageHeight();
+            if (ow > 0 && oh > 0)
+                aspectRatio = ow / oh;
+        }
+
+        // Measure natural height with the provisional width.
         float natural = 0.f;
-        auto* card = makeCard(game, cardWidth, cardImage, detail, false, &natural);
-        card->setMarginRight(gap);
-        cards.push_back(card);
-        tallest = std::max(tallest, natural);
+        makeCard(game, provisionalWidth, cardImage, detail, false, &natural);
+        // Clean up the temp card (it was added to no parent, so we own it).
+        delete tempCard;
+
+        provisional.push_back({game, detail, nullptr, nullptr, aspectRatio, natural});
     }
+
+    // Determine the target total card height (tallest natural height).
+    float tallest = 0.f;
+    for (const auto& pc : provisional)
+        tallest = std::max(tallest, pc.naturalHeight);
 
     if (ThemeManager::instance().hasStyle("random_card_height"))
         tallest = std::min(tallest, token("random_card_height", tallest));
 
+    // The image height inside the card at this total height.
+    const float targetImageHeight = tallest - pad * 2 - titleHeight - detailHeight;
+
+    // 2) Build the final cards with per-card widths.
     auto* content = new brls::Box();
     content->setAxis(brls::Axis::ROW);
     content->setAlignItems(brls::AlignItems::FLEX_START);
 
-    for (auto* card : cards) {
+    for (auto& pc : provisional) {
+        // Width needed for this cover to fit at targetImageHeight.
+        const float imageWidth = targetImageHeight * pc.aspectRatio;
+        const float cardWidth = imageWidth + pad * 2;
+
+        float natural = 0.f;
+        auto* card = makeCard(pc.game, cardWidth, cardImage, pc.detail, false, &natural);
         card->setHeight(tallest);
+        card->setMarginRight(gap);
         if (!firstFocusable_)
             firstFocusable_ = card;
         content->addView(card);
     }
 
-    // HScrollingFrame cannot be padded, so the room for the indicator lives on its height.
     auto* frame = new brls::HScrollingFrame();
     frame->setWidthPercentage(100.f);
     frame->setHeight(tallest + tokenChain("random_indicator_gap", "tile_indicator_gap", 22.f));
