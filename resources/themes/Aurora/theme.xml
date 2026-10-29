@@ -93,10 +93,14 @@
     <entry key="meta_row_gap" value="6"/>
     <entry key="meta_value_font" value="15"/>
     <entry key="meta_width_pct" value="33.3"/>
+    <entry key="page_overflow" value="scroll"/>
     <entry key="page_padding" value="24"/>
+    <entry key="page_scroll_behavior" value="centered"/>
     <entry key="random_games" value="10"/>
+    <entry key="random_gap" value="10"/>
+    <entry key="random_indicator_gap" value="22"/>
     <entry key="random_per_row" value="5"/>
-    <entry key="random_row_gap" value="10"/>
+    <entry key="random_scroll_behavior" value="centered"/>
     <entry key="row_cards" value="8"/>
     <entry key="section_gap" value="14"/>
     <entry key="tile_focus_pick" value="random"/>

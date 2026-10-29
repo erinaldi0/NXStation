@@ -78,7 +78,8 @@ private:
 
     brls::Box* makeSectionHeader(const std::string& title, const std::string& count);
     brls::Box* makeCard(const GameItem& game, float width, float imageHeight,
-                        const std::string& detail, bool fillHeight = false);
+                        const std::string& detail, bool fillHeight = false,
+                        float* naturalHeight = nullptr);
     brls::Box* makeTile(const std::string& systemId);
     brls::Box* makeBadge(const std::string& text);
 

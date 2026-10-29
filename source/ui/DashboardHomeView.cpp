@@ -418,7 +418,8 @@ brls::Box* DashboardHomeView::makeSectionHeader(const std::string& title,
 }
 
 brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float imageHeight,
-                                       const std::string& detail, bool fillHeight)
+                                       const std::string& detail, bool fillHeight,
+                                       float* naturalHeight)
 {
     auto& theme = ThemeManager::instance();
     const float radius = token("card_radius", 12.f);
@@ -448,10 +449,13 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float 
 
     // Wrap the card precisely around the cover shape when its aspect ratio is known.
     // imageHeight is the fallback/cap for cards that should not grow.
-    if (fillHeight)
+    float imageHeightUsed = imageHeight;
+    if (fillHeight) {
         image->setGrow(1.f); // fills the row height Yoga gives the card
-    else
-        image->setHeight(std::min(imageHeight, wrappedImageHeight(image, innerWidth, imageHeight)));
+    } else {
+        imageHeightUsed = std::min(imageHeight, wrappedImageHeight(image, innerWidth, imageHeight));
+        image->setHeight(imageHeightUsed);
+    }
     cell->addView(image);
 
     auto* title = new brls::Label();
@@ -472,6 +476,13 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float 
         detailLabel->setAnimated(false);
         detailLabel->setWidth(innerWidth);
         cell->addView(detailLabel);
+    }
+
+    if (naturalHeight != nullptr) {
+        const float titleFont = tokenChain("card_title_font", "font_body", 17.f);
+        const float detailFont = tokenChain("card_detail_font", "font_meta", 14.f);
+        *naturalHeight = pad * 2 + imageHeightUsed + titleFont * 1.3f +
+                         (detail.empty() ? 0.f : detailFont * 1.3f);
     }
 
     return cell;
@@ -788,50 +799,69 @@ std::vector<GameItem> DashboardHomeView::randomGames(size_t count)
 brls::Box* DashboardHomeView::buildRandomSection()
 {
     const size_t count = static_cast<size_t>(token("random_games", 10.f));
-    const size_t perRow = std::max<size_t>(1, static_cast<size_t>(token("random_per_row", 5.f)));
+    const size_t visible = std::max<size_t>(1, static_cast<size_t>(token("random_per_row", 5.f)));
     const std::vector<GameItem> games = randomGames(count);
     if (games.empty())
         return nullptr;
 
     auto* section = new brls::Box();
     section->setAxis(brls::Axis::COLUMN);
-    section->setGrow(1.f); // fills the remaining vertical space with the card rows
+    section->setPadding(0, 0, token("section_gap", 14.f), 0);
     section->addView(makeSectionHeader("Random picks", std::to_string(games.size())));
 
+    const float gap = tokenChain("random_gap", "card_gap", 10.f);
+    const float cardImage = token("card_image_height", 120.f);
+
+    // Card width: the theme can pin it, otherwise it is what `random_per_row` cards need
+    // to fill the visible width - the rest of the row is reached by scrolling.
     float cardWidth;
     if (ThemeManager::instance().hasStyle("random_card_width"))
         cardWidth = token("random_card_width", 224.f);
     else {
         const float inner = 1280.f - token("page_padding", 24.f) * 2.f;
-        cardWidth = (inner - static_cast<float>(perRow) * token("card_gap", 10.f)) /
-                    static_cast<float>(perRow);
+        cardWidth = (inner - static_cast<float>(visible) * gap) / static_cast<float>(visible);
     }
 
-    const float rowGap = token("random_row_gap", token("card_gap", 10.f));
-
-    size_t index = 0;
-    while (index < games.size()) {
-        auto* row = new brls::Box();
-        row->setAxis(brls::Axis::ROW);
-        row->setAlignItems(brls::AlignItems::STRETCH);
-        row->setGrow(1.f); // rows share whatever height is left below the fixed sections
-        row->setPadding(0, 0, rowGap, 0);
-
-        for (size_t i = 0; i < perRow && index < games.size(); ++i, ++index) {
-            const GameItem& game = games[index];
-            const std::string detail = game.systemId.empty()
-                                           ? game.meta.genre
-                                           : systemAcronym(game.systemId);
-            auto* card = makeCard(game, cardWidth, 0.f, detail, true);
-            card->setGrow(1.f);
-            if (!firstFocusable_)
-                firstFocusable_ = card;
-            row->addView(card);
-        }
-
-        section->addView(row);
+    // Build the cards first so the frame can be sized around the tallest cover, then give
+    // every card that height so the row reads as a grid. Everything is fixed-height here:
+    // the previous grow factor made Yoga shrink the section and the content overlapped the
+    // Platforms row.
+    std::vector<brls::Box*> cards;
+    float tallest = 0.f;
+    for (const auto& game : games) {
+        const std::string detail = game.systemId.empty()
+                                       ? game.meta.genre
+                                       : systemAcronym(game.systemId);
+        float natural = 0.f;
+        auto* card = makeCard(game, cardWidth, cardImage, detail, false, &natural);
+        card->setMarginRight(gap);
+        cards.push_back(card);
+        tallest = std::max(tallest, natural);
     }
 
+    if (ThemeManager::instance().hasStyle("random_card_height"))
+        tallest = std::min(tallest, token("random_card_height", tallest));
+
+    auto* content = new brls::Box();
+    content->setAxis(brls::Axis::ROW);
+    content->setAlignItems(brls::AlignItems::FLEX_START);
+
+    for (auto* card : cards) {
+        card->setHeight(tallest);
+        if (!firstFocusable_)
+            firstFocusable_ = card;
+        content->addView(card);
+    }
+
+    // HScrollingFrame cannot be padded, so the room for the indicator lives on its height.
+    auto* frame = new brls::HScrollingFrame();
+    frame->setWidthPercentage(100.f);
+    frame->setHeight(tallest + tokenChain("random_indicator_gap", "tile_indicator_gap", 22.f));
+    frame->setScrollingBehavior(scrollBehavior("random_scroll_behavior",
+                                               brls::ScrollingBehavior::CENTERED));
+    frame->setContentView(content);
+
+    section->addView(frame);
     return section;
 }
 
@@ -1044,6 +1074,13 @@ void DashboardHomeView::rebuild()
         }
     }
 
+    // Sections below the top row go into a content box. The whole page keeps the
+    // natural height of every component; when the theme's numbers make it taller than
+    // the screen the body scrolls vertically. Yoga must not be left shrinking the
+    // sections, which is what made the content overlap the Platforms row.
+    auto* body = new brls::Box();
+    body->setAxis(brls::Axis::COLUMN);
+
     for (const auto& section : sections) {
         if (section == "hero" || section == "metadata")
             continue;
@@ -1062,7 +1099,21 @@ void DashboardHomeView::rebuild()
         // Unknown section names are ignored by design (forward-compatible theme keys).
 
         if (view)
-            this->addView(view);
+            body->addView(view);
+    }
+
+    // page_overflow: "scroll" (default) lets the sections scroll when they do not fit,
+    // "fit" keeps the single-screen layout for themes whose sizes already fit.
+    if (tokenStr("page_overflow", "scroll") == "scroll") {
+        auto* scroller = new brls::ScrollingFrame();
+        scroller->setGrow(1.f);
+        scroller->setScrollingBehavior(scrollBehavior("page_scroll_behavior",
+                                                      brls::ScrollingBehavior::CENTERED));
+        scroller->setContentView(body);
+        this->addView(scroller);
+    } else {
+        body->setGrow(1.f);
+        this->addView(body);
     }
 
     auto& theme = ThemeManager::instance();
