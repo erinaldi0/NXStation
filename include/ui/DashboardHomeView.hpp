@@ -39,6 +39,23 @@ private:
     NVGcolor idleBorderColor_{0, 0, 0, 0};
 };
 
+/** Label that truly wraps. Borealis only measures and wraps a label when its width is
+ *  constrained and its height is left free, so callers must set the width here (never the
+ *  height): with both dimensions fixed Yoga skips the measure function and the label draws a
+ *  single truncated line. setMaxLines() caps the visible lines and ellipsizes the overflow,
+ *  like the RomM platform cards. */
+class MultilineLabel : public brls::Label {
+public:
+    void setMaxLines(int lines);
+
+    void onLayout() override;
+
+private:
+    int maxLines_ = 0;
+    bool trimming_ = false;
+    std::string measuredText_;
+};
+
 /** RomMmate-style dashboard home, active when the theme declares layout="dashboard".
  *  Section order and visibility come from the theme's <sections> (theme.xml stays the only
  *  customization surface); appearance comes from its <style> tokens with fallback defaults. */

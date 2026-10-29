@@ -535,6 +535,7 @@
     &lt;entry key="hero_meta_font" value="14"/&gt;
     &lt;entry key="hero_desc_font" value="17"/&gt;
     &lt;entry key="hero_desc_height" value="90"/&gt;
+    &lt;entry key="hero_desc_lines" value="4"/&gt;         &lt;!-- max wrapped description lines --&gt;
     &lt;entry key="hero_badge_pad" value="10"/&gt;
     &lt;entry key="hero_badge_gap" value="8"/&gt;
     &lt;entry key="hero_image_align" value="center"/&gt;   &lt;!-- left | center | right --&gt;
@@ -589,7 +590,8 @@
               <code>layout="dashboard"</code> renders the home screen as a dashboard: the Focus
               hero column (<code>hero_width_pct</code>, 2/3 by default) sits next to the Details
               column (<code>meta_width_pct</code>, 1/3), followed by a horizontally scrollable
-              Platforms row of rounded-square tiles (icon centered) and a Random picks row of
+              Platforms row of rounded-square tiles (icon centered, only the platforms that
+              contain at least one game are listed) and a Random picks row of
               cards that fills the remaining height; Continue playing and Favourites are optional.
               The <code>&lt;sections&gt;</code> block controls order and visibility: delete a
               section to hide it, reorder it to move it. Numeric <code>brls/…</code> style entries

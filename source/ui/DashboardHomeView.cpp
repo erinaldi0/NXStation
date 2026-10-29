@@ -118,6 +118,77 @@ std::string releaseYear(const std::string& date)
 
 } // namespace
 
+void MultilineLabel::setMaxLines(int lines)
+{
+    maxLines_ = std::max(0, lines);
+    trimming_ = false;
+    measuredText_.clear();
+    invalidate();
+}
+
+void MultilineLabel::onLayout()
+{
+    brls::Label::onLayout();
+
+    if (maxLines_ <= 0 || trimming_)
+        return;
+
+    const float width = this->getWidth();
+    if (width == 0)
+        return;
+
+    NVGcontext* vg = brls::Application::getNVGContext();
+    if (!vg)
+        return;
+
+    const std::string text = this->getFullText();
+    if (text.empty() || text == measuredText_)
+        return;
+
+    nvgFontSize(vg, this->getFontSize());
+    nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+    nvgFontFaceId(vg, this->getFont());
+    nvgTextLineHeight(vg, this->getLineHeight());
+
+    const float lineHeightPx = this->getFontSize() * this->getLineHeight();
+    const float maxPx = lineHeightPx * maxLines_;
+
+    auto textHeight = [&](const std::string& value) {
+        float bounds[4];
+        nvgTextBoxBounds(vg, 0, 0, width, value.c_str(), nullptr, bounds);
+        return bounds[3] - bounds[1];
+    };
+
+    if (textHeight(text) <= maxPx + 0.5f) {
+        measuredText_ = text;
+        return;
+    }
+
+    // Longest prefix that still fits in maxLines lines once the ellipsis is appended.
+    const std::string ellipsis = "\u2026";
+    float ellipsisBounds[4];
+    nvgTextBounds(vg, 0, 0, ellipsis.c_str(), nullptr, ellipsisBounds);
+
+    size_t low = 0;
+    size_t high = text.size();
+    while (low < high) {
+        const size_t mid = (low + high + 1) / 2;
+        if (textHeight(text.substr(0, mid) + ellipsis) <= maxPx + 0.5f)
+            low = mid;
+        else
+            high = mid - 1;
+    }
+
+    std::string cut = text.substr(0, low);
+    const size_t lastWord = cut.find_last_of(" \n");
+    if (lastWord != std::string::npos && lastWord > cut.size() / 2)
+        cut = cut.substr(0, lastWord);
+
+    measuredText_ = cut + ellipsis;
+    trimming_ = true;
+    setText(measuredText_); // measured again on the next layout pass, then it stays stable
+}
+
 void DashboardCell::onFocusGained()
 {
     brls::Box::onFocusGained();
@@ -400,14 +471,15 @@ brls::Box* DashboardHomeView::makeTile(const std::string& systemId)
         const float nameFont = tokenChain("tile_name_font", "card_detail_font", 13.f);
         const int nameLines = std::max(1, static_cast<int>(token("tile_name_lines", 2.f)));
 
-        auto* label = new brls::Label();
+        auto* label = new MultilineLabel();
         label->setText(browser::systemDisplayName(systemId));
         label->setFontSize(nameFont);
         label->setTextColor(theme.color("nxstation/favorite_text"));
         label->setSingleLine(false);            // wrap, like the RomM platform cards
         label->setLineHeight(1.3f);
-        // A label only wraps when its width is constrained.
-        label->setDimensions(size - pad * 2, nameLines * nameFont * 1.3f);
+        label->setMaxLines(nameLines);
+        // Wrapping needs a constrained width; the height stays free so the label can grow.
+        label->setWidth(size - pad * 2);
         label->setHorizontalAlign(brls::HorizontalAlign::CENTER);
         label->setAnimated(false);
         tile->addView(label);
@@ -570,14 +642,21 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     heroBadgeRow_->setWidth(textWidth);
     middle->addView(heroBadgeRow_);
 
-    heroDescription_ = new brls::Label();
-    heroDescription_->setFontSize(tokenChain("hero_desc_font", "font_body", 15.f));
-    heroDescription_->setTextColor(theme.color("nxstation/body_text"));
-    heroDescription_->setSingleLine(false);
-    heroDescription_->setLineHeight(1.4f);
-    heroDescription_->setVerticalAlign(brls::VerticalAlign::TOP);
-    heroDescription_->setDimensions(textWidth, tokenChain("hero_desc_height", "description_height", 90.f));
-    middle->addView(heroDescription_);
+    const int descLines = std::max(1, static_cast<int>(token("hero_desc_lines", 4.f)));
+
+    auto* desc = new MultilineLabel();
+    desc->setFontSize(tokenChain("hero_desc_font", "font_body", 15.f));
+    desc->setTextColor(theme.color("nxstation/body_text"));
+    desc->setSingleLine(false);
+    desc->setLineHeight(1.4f);
+    desc->setMaxLines(descLines);
+    desc->setVerticalAlign(brls::VerticalAlign::TOP);
+    desc->setWidth(textWidth); // constrained width => real wrapping, height grows
+    desc->setAnimated(false);
+    if (ThemeManager::instance().hasStyle("hero_desc_height"))
+        desc->setMinHeight(token("hero_desc_height", 90.f)); // keeps the block stable for short descriptions
+    heroDescription_ = desc;
+    middle->addView(desc);
 
     auto* row = new brls::Box();
     row->setAxis(brls::Axis::ROW);
@@ -701,9 +780,13 @@ brls::Box* DashboardHomeView::buildRandomSection()
 
 brls::Box* DashboardHomeView::buildPlatformsSection()
 {
+    // Only the platforms with at least one game in them.
     std::vector<std::string> platforms;
-    for (const auto& sys : Config::instance().systems())
+    for (const auto& sys : Config::instance().systems()) {
+        if (AppState::instance().gamesFor(sys.id).empty())
+            continue;
         platforms.push_back(sys.id);
+    }
     if (platforms.empty())
         return nullptr;
 
@@ -712,7 +795,7 @@ brls::Box* DashboardHomeView::buildPlatformsSection()
     section->setPadding(0, 0, token("section_gap", 14.f), 0);
     section->addView(makeSectionHeader("Platforms", std::to_string(platforms.size())));
 
-    const float tileSize = token("tile_size", 96.f);
+    const float tileSize = token("tile_size", 112.f);
 
     // HScrollingFrame scrolls left-right; padding is not supported on the frame,
     // so all spacing lives on the content view.

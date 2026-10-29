@@ -74,6 +74,7 @@
     <entry key="hero_badge_pad" value="10"/>
     <entry key="hero_desc_font" value="15"/>
     <entry key="hero_desc_height" value="90"/>
+    <entry key="hero_desc_lines" value="4"/>
     <entry key="hero_gap" value="20"/>
     <entry key="hero_image_align" value="center"/>
     <entry key="hero_image_width" value="140"/>
