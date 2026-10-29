@@ -659,6 +659,7 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     const float radius = tokenChain("hero_tile_radius", "card_radius", 12.f);
     const float pad = token("hero_tile_padding", 4.f);
     const float heroImageW = token("hero_image_width", 140.f);
+    const float fixedHeight = token("hero_fixed_height", 0.f);
 
     // Hero tile (focusable): wraps tightly around the shape of the cover image.
     heroImage_ = new brls::Image();
@@ -697,6 +698,14 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     middle->setAxis(brls::Axis::COLUMN);
     middle->setWidth(textWidth);
     middle->setMarginLeft(token("hero_gap", 20.f));
+
+    // When hero_fixed_height is set, constrain the middle column so badges
+    // don't push the layout. The description truncates at hero_desc_lines.
+    if (fixedHeight > 0.f) {
+        // Estimate header height: section header (~30) + section_gap (14) = ~44
+        // Row gets the rest. Middle column matches row height.
+        middle->setHeight(fixedHeight - 44.f);
+    }
 
     heroTitle_ = new brls::Label();
     heroTitle_->setFontSize(tokenChain("hero_title_font", "font_title", 28.f));
@@ -741,6 +750,11 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     row->addView(card);
     row->addView(middle);
 
+    // Constrain row height when hero_fixed_height is set
+    if (fixedHeight > 0.f) {
+        row->setHeight(fixedHeight - 44.f); // minus header
+    }
+
     auto* section = new brls::Box();
     section->setAxis(brls::Axis::COLUMN);
     section->setPadding(0, 0, token("section_gap", 14.f), 0);
@@ -748,7 +762,6 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     section->addView(row);
 
     // Fixed height for the Focus section so the layout stays stable when content changes.
-    const float fixedHeight = token("hero_fixed_height", 0.f);
     if (fixedHeight > 0.f)
         section->setHeight(fixedHeight);
 
