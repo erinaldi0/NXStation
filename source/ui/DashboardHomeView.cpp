@@ -747,6 +747,11 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     section->addView(makeSectionHeader("Focus", {}));
     section->addView(row);
 
+    // Fixed height for the Focus section so the layout stays stable when content changes.
+    const float fixedHeight = token("hero_fixed_height", 0.f);
+    if (fixedHeight > 0.f)
+        section->setHeight(fixedHeight);
+
     firstFocusable_ = card;
     focusTargets_[card->systemId()] = card;
 

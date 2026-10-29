@@ -40,6 +40,7 @@
     <entry key="hero_desc_font" value="17"/>
     <entry key="hero_desc_height" value="90"/>
     <entry key="hero_desc_lines" value="4"/>
+    <entry key="hero_fixed_height" value="250"/>  <!-- 0 = auto (content-based) -->
     <entry key="hero_badge_pad" value="10"/>
     <entry key="hero_badge_gap" value="8"/>
     <entry key="hero_image_align" value="center"/>
