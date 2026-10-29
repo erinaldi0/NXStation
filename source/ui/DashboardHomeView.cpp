@@ -669,13 +669,10 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
 
     auto& games = AppState::instance().gamesFor(systemIds_.empty() ? std::string() : systemIds_.front());
 
-    // The hero starts on the game the theme's tile_focus_pick behavior would show for
-    // the first platform, so the tile and the Focus block agree from the start.
-    const GameItem heroSeed = games.empty()
-        ? GameItem{}
-        : (tokenStr("tile_focus_pick", "random") == "first"
-               ? games.front()
-               : *pickRandomGame(systemIds_.front()));
+    // Default to the most recently played game (from the lastPlayed virtual system).
+    // When a platform tile or game card gains focus, onCellFocused will update the hero.
+    const auto& recentGames = AppState::instance().gamesFor(kLastPlayedSystemId);
+    const GameItem heroSeed = recentGames.empty() ? GameItem{} : recentGames.front();
     setCoverArt(heroImage_, heroSeed);
     heroImage_->setHeight(wrappedImageHeight(heroImage_, heroImageW,
                                              token("hero_image_height", heroImageW * 1.4f)));
@@ -747,13 +744,13 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     auto* section = new brls::Box();
     section->setAxis(brls::Axis::COLUMN);
     section->setPadding(0, 0, token("section_gap", 14.f), 0);
-    section->addView(makeSectionHeader("Focus", {}));
+    section->addView(makeSectionHeader("Last Played", {}));
     section->addView(row);
 
     firstFocusable_ = card;
     focusTargets_[card->systemId()] = card;
 
-    updateHero(games.empty() ? nullptr : &heroSeed);
+    updateHero(recentGames.empty() ? nullptr : &heroSeed);
     return section;
 }
 
