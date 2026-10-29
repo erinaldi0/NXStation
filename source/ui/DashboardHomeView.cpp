@@ -74,6 +74,17 @@ brls::ScrollingBehavior scrollBehavior(const char* key, brls::ScrollingBehavior 
     return fallback;
 }
 
+// Height needed to wrap a tile precisely around the loaded image at `width`
+// (its own aspect ratio), or `fallback` when the image dimensions are unknown.
+float wrappedImageHeight(brls::Image* image, float width, float fallback)
+{
+    const float ow = image->getOriginalImageWidth();
+    const float oh = image->getOriginalImageHeight();
+    if (ow > 0 && oh > 0)
+        return width * oh / ow;
+    return fallback;
+}
+
 NVGcolor mutedColor()
 {
     return ThemeManager::instance().color("nxstation/muted_text");
@@ -304,20 +315,26 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float 
     cell->setFocusSound(brls::SOUND_NONE);
     cell->setHideHighlight(true);
     cell->setMarginRight(token("card_gap", 10.f));
+    cell->setWidth(width);
 
     auto* image = new brls::Image();
-    image->setWidth(width - pad * 2);
-    if (fillHeight)
-        image->setGrow(1.f); // the image fills whatever row height Yoga gives the card
-    else
-        image->setHeight(imageHeight);
+    const float innerWidth = width - pad * 2;
+    image->setWidth(innerWidth);
     image->setScalingType(brls::ImageScalingType::FIT);
     image->setImageAlign(imageAlign("card_image_align", brls::ImageAlignment::CENTER));
+
     const std::string art = game.meta.boxArtPath;
     const std::string path =
         firstExistingPath({art, theme.boxPlaceholderPath(), sf::gameArtPlaceholderPath()});
     if (!path.empty())
         image->setImageFromFile(path);
+
+    // Wrap the card precisely around the cover shape when its aspect ratio is known.
+    // imageHeight is the fallback/cap for cards that should not grow.
+    if (fillHeight)
+        image->setGrow(1.f); // fills the row height Yoga gives the card
+    else
+        image->setHeight(std::min(imageHeight, wrappedImageHeight(image, innerWidth, imageHeight)));
     cell->addView(image);
 
     auto* title = new brls::Label();
@@ -326,6 +343,7 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float 
     title->setTextColor(theme.color("nxstation/title_text"));
     title->setSingleLine(true);
     title->setAnimated(false);
+    title->setWidth(innerWidth);
     cell->addView(title);
 
     if (!detail.empty()) {
@@ -335,6 +353,7 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float 
         detailLabel->setTextColor(theme.color("nxstation/detail_text"));
         detailLabel->setSingleLine(true);
         detailLabel->setAnimated(false);
+        detailLabel->setWidth(innerWidth);
         cell->addView(detailLabel);
     }
 
@@ -344,10 +363,10 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float 
 brls::Box* DashboardHomeView::makeTile(const std::string& systemId)
 {
     auto& theme = ThemeManager::instance();
-    const float size = token("tile_size", 96.f);
-    const float pad = tokenChain("tile_padding", "card_padding", 10.f);
+    const float size = token("tile_size", 112.f);
+    const float pad = tokenChain("tile_padding", "card_padding", 8.f);
     const float radius = tokenChain("tile_radius", "card_radius", 12.f);
-    const float iconSize = token("tile_icon", 44.f);
+    const float iconSize = token("tile_icon", 40.f);
 
     auto* tile = new DashboardCell(this, systemId, {}, true);
     tile->setAxis(brls::Axis::COLUMN);
@@ -378,13 +397,18 @@ brls::Box* DashboardHomeView::makeTile(const std::string& systemId)
         spacer->setHeight(token("tile_name_gap", 6.f));
         tile->addView(spacer);
 
+        const float nameFont = tokenChain("tile_name_font", "card_detail_font", 13.f);
+        const int nameLines = std::max(1, static_cast<int>(token("tile_name_lines", 2.f)));
+
         auto* label = new brls::Label();
         label->setText(browser::systemDisplayName(systemId));
-        label->setFontSize(tokenChain("tile_name_font", "card_detail_font", 14.f));
+        label->setFontSize(nameFont);
         label->setTextColor(theme.color("nxstation/favorite_text"));
+        label->setSingleLine(false);            // wrap, like the RomM platform cards
+        label->setLineHeight(1.3f);
+        // A label only wraps when its width is constrained.
+        label->setDimensions(size - pad * 2, nameLines * nameFont * 1.3f);
         label->setHorizontalAlign(brls::HorizontalAlign::CENTER);
-        label->setMaxWidth(size - pad * 2);
-        label->setSingleLine(true);
         label->setAnimated(false);
         tile->addView(label);
     }
@@ -481,24 +505,29 @@ void DashboardHomeView::buildTopBar()
     this->addView(row);
 }
 
-brls::Box* DashboardHomeView::buildHeroSection()
+brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
 {
     auto& theme = ThemeManager::instance();
-    const float heroSize = token("hero_size", 180.f);
-    const float radius = token("card_radius", 12.f);
-    const float pad = token("card_padding", 10.f);
-    const float heroImageW = token("hero_image_width", heroSize - pad * 2);
-    const float heroImageH = token("hero_image_height", heroSize - pad * 2);
+    const float radius = tokenChain("hero_tile_radius", "card_radius", 12.f);
+    const float pad = token("hero_tile_padding", 6.f);
+    const float heroImageW = token("hero_image_width", 140.f);
 
-    // Hero card (focusable — shows the focused game, like the reference layout).
+    // Hero tile (focusable): wraps tightly around the shape of the cover image.
     heroImage_ = new brls::Image();
-    heroImage_->setDimensions(heroImageW, heroImageH);
+    heroImage_->setWidth(heroImageW);
     heroImage_->setScalingType(brls::ImageScalingType::FIT);
     heroImage_->setImageAlign(imageAlign("hero_image_align", brls::ImageAlignment::CENTER));
 
     auto& games = AppState::instance().gamesFor(systemIds_.empty() ? std::string() : systemIds_.front());
 
     const GameItem heroSeed = games.empty() ? GameItem{} : games.front();
+    const std::string seedPath = firstExistingPath(
+        {heroSeed.meta.boxArtPath, theme.boxPlaceholderPath(), sf::gameArtPlaceholderPath()});
+    if (!seedPath.empty())
+        heroImage_->setImageFromFile(seedPath);
+    heroImage_->setHeight(wrappedImageHeight(heroImage_, heroImageW,
+                                             token("hero_image_height", heroImageW * 1.4f)));
+
     auto* card = new DashboardCell(this, heroSeed.systemId, heroSeed.path, heroSeed.path.empty());
     card->setAxis(brls::Axis::COLUMN);
     card->setPadding(pad, pad, pad, pad);
@@ -510,36 +539,44 @@ brls::Box* DashboardHomeView::buildHeroSection()
     card->setHideHighlight(true);
     card->addView(heroImage_);
 
+    // The text column needs an explicit width for labels to wrap (Borealis labels
+    // only wrap when their width is constrained).
+    const float textWidth = std::min(token("hero_text_width", 860.f),
+                                     columnWidth - heroImageW - pad * 2 - token("hero_gap", 20.f));
+
     auto* middle = new brls::Box();
     middle->setAxis(brls::Axis::COLUMN);
-    middle->setGrow(1.f);
+    middle->setWidth(textWidth);
     middle->setMarginLeft(token("hero_gap", 20.f));
-    middle->setMaxWidth(token("hero_text_width", 860.f));
 
     heroTitle_ = new brls::Label();
     heroTitle_->setFontSize(tokenChain("hero_title_font", "font_title", 28.f));
     heroTitle_->setTextColor(theme.color("nxstation/title_text"));
     heroTitle_->setSingleLine(true);
     heroTitle_->setAnimated(false);
+    heroTitle_->setWidth(textWidth);
     middle->addView(heroTitle_);
 
     heroMeta_ = new brls::Label();
     heroMeta_->setFontSize(tokenChain("hero_meta_font", "font_meta", 14.f));
     heroMeta_->setSingleLine(true);
     heroMeta_->setAnimated(false);
+    heroMeta_->setWidth(textWidth);
     middle->addView(heroMeta_);
 
     heroBadgeRow_ = new brls::Box();
     heroBadgeRow_->setAxis(brls::Axis::ROW);
     heroBadgeRow_->setPadding(token("hero_badge_pad", 10.f), 0, token("hero_badge_pad", 10.f), 0);
+    heroBadgeRow_->setWidth(textWidth);
     middle->addView(heroBadgeRow_);
 
     heroDescription_ = new brls::Label();
-    heroDescription_->setFontSize(tokenChain("hero_desc_font", "font_body", 17.f));
+    heroDescription_->setFontSize(tokenChain("hero_desc_font", "font_body", 15.f));
     heroDescription_->setTextColor(theme.color("nxstation/body_text"));
     heroDescription_->setSingleLine(false);
     heroDescription_->setLineHeight(1.4f);
-    heroDescription_->setHeight(tokenChain("hero_desc_height", "description_height", 90.f));
+    heroDescription_->setVerticalAlign(brls::VerticalAlign::TOP);
+    heroDescription_->setDimensions(textWidth, tokenChain("hero_desc_height", "description_height", 90.f));
     middle->addView(heroDescription_);
 
     auto* row = new brls::Box();
@@ -792,11 +829,15 @@ void DashboardHomeView::updateHero(const GameItem* game)
                                   : "No description — scrape from the Y menu to fill in metadata.");
 
     if (heroImage_) {
+        const float w = token("hero_image_width", 140.f);
         const std::string path = firstExistingPath(
             {game ? game->meta.boxArtPath : "", ThemeManager::instance().boxPlaceholderPath(),
              sf::gameArtPlaceholderPath()});
         if (!path.empty())
             heroImage_->setImageFromFile(path);
+        // The tile adapts to the newly focused cover's shape.
+        heroImage_->setHeight(wrappedImageHeight(heroImage_, w,
+                                                 token("hero_image_height", w * 1.4f)));
     }
 
     if (!metaLabels_.empty()) {
@@ -831,7 +872,9 @@ void DashboardHomeView::rebuild()
     const bool hasMeta = std::find(sections.begin(), sections.end(), "metadata") != sections.end();
 
     if (hasHero || hasMeta) {
-        auto* hero = hasHero ? buildHeroSection() : nullptr;
+        const float inner = 1280.f - pagePad * 2.f;
+        const float heroPct = token("hero_width_pct", 66.7f);
+        auto* hero = hasHero ? buildHeroSection(hasMeta ? inner * heroPct / 100.f : inner) : nullptr;
         auto* meta = hasMeta ? buildMetadataSection() : nullptr;
 
         if (hero && meta) {
@@ -841,8 +884,6 @@ void DashboardHomeView::rebuild()
             topRow->setPadding(0, 0, token("section_gap", 14.f), 0);
 
             const float columnGap = token("column_gap", 16.f);
-            const float inner = 1280.f - pagePad * 2.f;
-            const float heroPct = token("hero_width_pct", 66.7f);
             const float metaPct = token("meta_width_pct",
                                         100.f - heroPct - columnGap / inner * 100.f);
 

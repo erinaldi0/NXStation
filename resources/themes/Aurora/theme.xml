@@ -76,9 +76,12 @@
     <entry key="hero_desc_height" value="90"/>
     <entry key="hero_gap" value="20"/>
     <entry key="hero_image_align" value="center"/>
+    <entry key="hero_image_width" value="140"/>
     <entry key="hero_meta_font" value="14"/>
     <entry key="hero_size" value="180"/>
     <entry key="hero_text_width" value="860"/>
+    <entry key="hero_tile_padding" value="6"/>
+    <entry key="hero_tile_radius" value="12"/>
     <entry key="hero_title_font" value="30"/>
     <entry key="hero_width_pct" value="66.7"/>
     <entry key="hint_font" value="14"/>
@@ -94,16 +97,17 @@
     <entry key="row_cards" value="8"/>
     <entry key="section_gap" value="14"/>
     <entry key="tile_gap" value="10"/>
-    <entry key="tile_icon" value="44"/>
+    <entry key="tile_icon" value="40"/>
     <entry key="tile_image_align" value="center"/>
     <entry key="tile_indicator_gap" value="22"/>
-    <entry key="tile_name_font" value="14"/>
+    <entry key="tile_name_font" value="13"/>
     <entry key="tile_name_gap" value="6"/>
-    <entry key="tile_padding" value="10"/>
+    <entry key="tile_name_lines" value="2"/>
+    <entry key="tile_padding" value="8"/>
     <entry key="tile_radius" value="12"/>
     <entry key="tile_scroll_behavior" value="centered"/>
     <entry key="tile_show_name" value="true"/>
-    <entry key="tile_size" value="96"/>
+    <entry key="tile_size" value="112"/>
     <entry key="topbar_gap" value="18"/>
     <entry key="topbar_logo" value="44"/>
   </style>

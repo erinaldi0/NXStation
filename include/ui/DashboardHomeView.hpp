@@ -65,7 +65,7 @@ private:
     brls::Box* makeBadge(const std::string& text);
 
     void buildTopBar();
-    brls::Box* buildHeroSection();
+    brls::Box* buildHeroSection(float columnWidth);
     brls::Box* buildGamesSection(const std::string& headerTitle, const std::vector<GameItem>& games);
     brls::Box* buildPlatformsSection();
     brls::Box* buildRandomSection();
