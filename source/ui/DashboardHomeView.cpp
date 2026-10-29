@@ -669,8 +669,9 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     const float slotWidth = fixedHeight > 0.f
                               ? std::max(heroImageW, (fixedHeight - 44.f - pad * 2) * maxAspect)
                               : heroImageW;
+    const float cardHeight = fixedHeight > 0.f ? fixedHeight - 44.f : 0.f;
     const float textWidth = std::min(token("hero_text_width", 860.f),
-                                     columnWidth - slotWidth - gap);
+                                     columnWidth - slotWidth - pad * 2 - gap);
 
     // Hero tile (focusable): fixed height, variable width driven by the cover aspect
     // ratio. The width is left to Yoga so Borealis' image measure function computes it
@@ -703,22 +704,13 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     card->addView(heroImage_);
 
     if (fixedHeight > 0.f) {
+        /* The slot is constant so the title/meta/description column never moves, and the
+         * cover is centered inside it (align-items + justify-content CENTER). Only the
+         * cover width changes, from its own aspect ratio, at the fixed height. */
         const float cardHeight = fixedHeight - 44.f; // section - header
-        const float imageHeight = cardHeight - pad * 2;
-
-        /* Height is the fixed axis, width follows the cover through the measure
-         * function. The slot is wide enough for the widest cover expected at this
-         * height (hero_image_max_aspect), otherwise a very landscape cover would be
-         * squeezed by FIT and would not keep the fixed height. The slot is constant,
-         * so the title/meta/description column never moves. */
-        heroImage_->setHeight(imageHeight);
-        heroImage_->setWidth(brls::View::AUTO);
-        heroImage_->setMaxWidth(slotWidth - pad * 2);
-
-        card->setWidth(slotWidth);
-        card->setMinWidth(slotWidth);
-        card->setMaxWidth(slotWidth);
-        card->setHeight(cardHeight);
+        card->setDimensions(slotWidth + pad * 2, cardHeight);
+        card->setMinWidth(slotWidth + pad * 2);
+        card->setMaxWidth(slotWidth + pad * 2);
         card->setMinHeight(cardHeight);
         card->setMaxHeight(cardHeight);
         card->setGrow(0.f);
@@ -1118,6 +1110,56 @@ void DashboardHomeView::setMetaBadge(const std::string& text)
     metaBadgeRow_->addView(badge);
 }
 
+/* The hero cover keeps one height for every game and a width that follows its own shape.
+ * Both dimensions are set explicitly rather than left to Yoga: the FIT measure function
+ * prefers whichever axis is constrained, so with the width bounded by the slot it scales
+ * the cover down instead of honouring the fixed height. The texture dimensions are only
+ * known once the load completes, so when they are still unknown the sizing is retried on
+ * the next frame (brls::sync runs on the main loop after innerSetImage). */
+void DashboardHomeView::applyHeroCoverSize()
+{
+    if (!heroImage_)
+        return;
+
+    const float fixedHeight = token("hero_fixed_height", 0.f);
+    if (fixedHeight <= 0.f)
+        return;
+
+    const float pad = token("hero_tile_padding", 4.f);
+    const float cardHeight = fixedHeight - 44.f;          // section - header
+    const float imageHeight = cardHeight - pad * 2;
+    const float maxAspect = token("hero_image_max_aspect", 1.0f);
+
+    const float ow = heroImage_->getOriginalImageWidth();
+    const float oh = heroImage_->getOriginalImageHeight();
+    if (ow <= 0.f || oh <= 0.f) {
+        brls::sync([this] { applyHeroCoverSize(); });
+        return;
+    }
+
+    const float aspect = ow / oh;
+    const float guardWidth = imageHeight * maxAspect;
+
+    float width = imageHeight * aspect;
+    float height = imageHeight;
+    if (width > guardWidth) {
+        // Cover wider than the guard: keep it inside the slot, which costs height.
+        width = guardWidth;
+        height = width / aspect;
+    }
+
+    heroImage_->setDimensions(width, height);
+
+    if (auto* card = heroImage_->getParent()) {
+        const float slotWidth = std::max(token("hero_image_width", 140.f), guardWidth);
+        card->setDimensions(slotWidth + pad * 2, cardHeight);
+        card->setMinWidth(slotWidth + pad * 2);
+        card->setMaxWidth(slotWidth + pad * 2);
+        card->setMinHeight(cardHeight);
+        card->setMaxHeight(cardHeight);
+    }
+}
+
 void DashboardHomeView::updateHero(const GameItem* game)
 {
     if (!heroTitle_)
@@ -1157,12 +1199,7 @@ void DashboardHomeView::updateHero(const GameItem* game)
         const float fixedHeight = token("hero_fixed_height", 0.f);
         setCoverArt(heroImage_, game ? *game : GameItem{});
         if (fixedHeight > 0.f) {
-            /* Height only: the width is automatic, so Borealis' image measure function
-             * re-derives it from the newly loaded texture on the next layout pass.
-             * Reading getOriginalImage* here would use the previous cover, because the
-             * texture load is asynchronous. */
-            const float cardHeight = fixedHeight - 44.f; // section - header
-            heroImage_->setHeight(cardHeight - token("hero_tile_padding", 4.f) * 2);
+            applyHeroCoverSize();
         } else {
             // Auto mode: use token width, height from aspect ratio.
             const float w = token("hero_image_width", 140.f);

@@ -94,6 +94,7 @@ private:
     const GameItem* pickRandomGame(const std::string& systemId);
 
     void updateHero(const GameItem* game);
+    void applyHeroCoverSize();
     void setMetaBadge(const std::string& text);
     void setMetaRow(const std::string& key, const std::string& value);
 
