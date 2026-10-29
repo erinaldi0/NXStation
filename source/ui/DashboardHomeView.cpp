@@ -696,6 +696,10 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     if (fixedHeight > 0.f) {
         const float cardHeight = fixedHeight - 44.f; // section - header
         card->setHeight(cardHeight);
+        card->setMinHeight(cardHeight);
+        card->setMaxHeight(cardHeight);
+        card->setGrow(0.f);
+        card->setShrink(0.f);
         heroImage_->setHeight(cardHeight - pad * 2);
         // Width is not set - it will be determined by the image's aspect ratio
         // at the fixed height. The row uses flex so middle takes remaining space.
@@ -755,7 +759,7 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
 
     auto* row = new brls::Box();
     row->setAxis(brls::Axis::ROW);
-    row->setAlignItems(brls::AlignItems::FLEX_START);
+    row->setAlignItems(brls::AlignItems::STRETCH);
     row->addView(card);
     row->addView(middle);
 
@@ -1141,6 +1145,12 @@ void DashboardHomeView::updateHero(const GameItem* game)
             // Fixed height mode: image scales to fit card height, width adjusts automatically.
             const float cardHeight = fixedHeight - 44.f; // section - header
             heroImage_->setHeight(cardHeight - token("hero_tile_padding", 4.f) * 2);
+            // Also re-apply card constraints in case layout was recalculated.
+            if (auto* card = heroImage_->getParent()) {
+                card->setHeight(cardHeight);
+                card->setMinHeight(cardHeight);
+                card->setMaxHeight(cardHeight);
+            }
             // Width not set - FIT scaling + CENTER alignment handles it.
         } else {
             // Auto mode: use token width, height from aspect ratio.
