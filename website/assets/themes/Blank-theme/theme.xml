@@ -1,10 +1,41 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  NXStation blank theme template.
+  NXStation blank theme template (schema 2).
   Copy this folder to: sdmc:/switch/NXStation/data/theme/YourThemeName/
   Then select it in Settings → Theme.
+
+  Optional schema-2 features (all optional — a colors-only theme still works):
+    layout="dashboard"  home renders as a dashboard (see <sections> below)
+    <style>             design tokens: fonts, card radius/padding, pill badges, focus glow
+    <sections>          dashboard section order + visibility
 -->
 <theme name="Blank" variant="dark">
+  <!-- Example schema-2 additions:
+  <style>
+    <entry key="font_title" value="28"/>
+    <entry key="font_section" value="20"/>
+    <entry key="font_body" value="17"/>
+    <entry key="font_meta" value="14"/>
+    <entry key="card_radius" value="12"/>
+    <entry key="card_padding" value="10"/>
+    <entry key="badge_radius" value="14"/>
+    <entry key="pill_height" value="44"/>
+    <entry key="hero_size" value="180"/>
+    <entry key="card_width" value="160"/>
+    <entry key="card_image_height" value="120"/>
+    <entry key="section_gap" value="14"/>
+    <entry key="focus_glow" value="#50FA7B80"/>
+    <entry key="badge_bg" value="#301C48"/>
+    <entry key="brand_subtitle" value="Your retro collection"/>
+  </style>
+  <sections>
+    <section name="hero"/>
+    <section name="continue"/>
+    <section name="favourites"/>
+    <section name="platforms"/>
+    <section name="metadata"/>
+  </sections>
+  -->
   <colors>
     <!-- Borealis core -->
     <color key="brls/clear" value="#120A1C"/>

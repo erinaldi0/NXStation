@@ -501,6 +501,52 @@
             </div>
             <p>See the bundled Vampire theme for a complete reference with every key defined.</p>
 
+            <h3>Schema 2: style tokens, layout and sections</h3>
+            <p>
+              Themes can optionally declare <code>schema="2"</code>, a <code>layout</code>
+              attribute and a <code>&lt;style&gt;</code> block. Everything is optional — a
+              colors-only theme still renders exactly as before, and unknown keys are ignored.
+            </p>
+            <pre class="wiki-tree"><code>&lt;theme name="MyTheme" variant="dark" schema="2" layout="dashboard"&gt;
+  &lt;colors&gt;…&lt;/colors&gt;
+  &lt;style&gt;
+    &lt;entry key="font_title" value="28"/&gt;
+    &lt;entry key="font_section" value="20"/&gt;
+    &lt;entry key="font_body" value="17"/&gt;
+    &lt;entry key="font_meta" value="14"/&gt;
+    &lt;entry key="card_radius" value="12"/&gt;
+    &lt;entry key="card_padding" value="10"/&gt;
+    &lt;entry key="badge_radius" value="14"/&gt;
+    &lt;entry key="pill_height" value="44"/&gt;
+    &lt;entry key="hero_size" value="180"/&gt;
+    &lt;entry key="card_width" value="160"/&gt;
+    &lt;entry key="card_image_height" value="120"/&gt;
+    &lt;entry key="section_gap" value="14"/&gt;
+    &lt;entry key="focus_glow" value="#4F8DFF80"/&gt;   &lt;!-- hex with alpha works --&gt;
+    &lt;entry key="badge_bg" value="#18243C"/&gt;
+    &lt;entry key="brand_subtitle" value="Your retro collection"/&gt;
+  &lt;/style&gt;
+  &lt;sections&gt;
+    &lt;section name="hero"/&gt;
+    &lt;section name="continue"/&gt;
+    &lt;section name="favourites"/&gt;
+    &lt;section name="platforms"/&gt;
+    &lt;section name="metadata"/&gt;
+  &lt;/sections&gt;
+&lt;/theme&gt;</code></pre>
+            <p>
+              <code>layout="dashboard"</code> renders the home screen as a dashboard (hero card,
+              Continue playing, Favourites, Platforms pills, metadata grid). The
+              <code>&lt;sections&gt;</code> block controls order and visibility: delete a section
+              to hide it, reorder it to move it. Numeric <code>brls/…</code> style entries also
+              override Borealis metrics (e.g. <code>brls/sidebar/item_height</code>). The bundled
+              <strong>Aurora</strong> theme is the schema-2 reference.
+            </p>
+            <p>
+              Optional theme assets: <code>icons/{systemId}.png</code> for the Platforms pill row
+              and <code>header_logo.png</code> for the top bar.
+            </p>
+
             <h3>Install a custom theme</h3>
             <ol class="faq-steps">
               <li>Copy your theme folder to <code>sdmc:/switch/NXStation/data/theme/YourThemeName/</code>.</li>

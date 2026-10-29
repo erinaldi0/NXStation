@@ -158,6 +158,8 @@ sfx/scrape_complete.wav
 
 **List-style system art:** `{systemId}-list.jpg` (also `.png` / `.webp`) in the theme folder, `backgrounds/`, or `images/` — e.g. `snes-list.jpg`. Until those exist, the list preview uses the bundled system placeholder.
 
+**Schema 2 (style tokens + dashboard layout):** `theme.xml` can optionally declare `schema="2"`, `layout="dashboard"`, a `<style>` block (fonts, card radius/padding, pill badges, focus glow, sizes), and a `<sections>` block (dashboard section order + visibility: `hero`, `continue`, `favourites`, `platforms`, `metadata`). Everything is optional — colors-only themes render exactly as before, and unknown keys are ignored. Numeric `brls/…` style entries override Borealis metrics. See the bundled **Aurora** theme for a full reference. Optional assets: `icons/{systemId}.png` (Platforms pill row) and `header_logo.png` (top bar).
+
 **System descriptions** (list preview text): edit
 
 `sdmc:/switch/NXStation/settings/system_descriptions.json`

@@ -284,6 +284,42 @@ PALETTES = {
     "log_success": "#16A34A", "log_failure": "#DC2626", "log_progress": "#22C55E", "log_neutral": "#6B7280",
     "overlay_bg": "#EEFAF2", "favorite_text": "#0A2818",
   },
+  # --- Schema 2 reference: dashboard layout + style tokens ---
+  "Aurora": {
+    "variant": "dark",
+    "layout": "dashboard",
+    "accent": "#4F8DFF", "highlight2": "#7CB3FF",
+    "clear": "#0A0F1C", "background": "#0B1220", "backdrop": "#060A14B8",
+    "highlight_bg": "#18243C", "sidebar_bg": "#0C1220", "separator": "#2A3A60",
+    "header_subtitle": "#8CA0C4", "list_value": "#8CA0C4",
+    "primary_btn": "#2563EB", "primary_disabled_bg": "#1A2238", "default_btn_bg": "#141C30",
+    "text": "#EEF2FA", "text_disabled": "#5E6E8C",
+    "card_bg": "#141E34", "card_border": "#2A3A60",
+    "dialog_bg": "#0A1120", "dialog_border": "#4F8DFFC0", "dialog_row": "#121C30",
+    "dialog_backdrop": "#000000A0",
+    "title_text": "#F2F6FC", "detail_text": "#9CB0D0", "muted_text": "#7284A4", "body_text": "#B8C8E0",
+    "preview_text": "#C8D8F0", "hint_text": "#6880A0", "count_text": "#8AA0C0",
+    "log_success": "#4F8DFF", "log_failure": "#FF6B6B", "log_progress": "#7CB3FF", "log_neutral": "#B0B8C8",
+    "overlay_bg": "#0A1120", "favorite_text": "#FFFFFF",
+    "style": {
+        "font_title": "28",
+        "font_section": "20",
+        "font_body": "17",
+        "font_meta": "14",
+        "card_radius": "12",
+        "card_padding": "10",
+        "badge_radius": "14",
+        "pill_height": "44",
+        "hero_size": "180",
+        "card_width": "160",
+        "card_image_height": "120",
+        "section_gap": "14",
+        "focus_glow": "#4F8DFF80",
+        "badge_bg": "#18243C",
+        "brand_subtitle": "Your retro collection",
+    },
+    "sections": ["hero", "continue", "favourites", "platforms", "metadata"],
+  },
 }
 
 LEGACY_NAMES = {
@@ -332,9 +368,16 @@ BRLS_MAP = {
 def theme_xml(name: str, palette: dict) -> str:
     variant = palette["variant"]
     accent = palette["accent"]
+
+    root_attrs = f'<theme name="{name}" variant="{variant}"'
+    if palette.get("layout"):
+        root_attrs += f' schema="2" layout="{palette["layout"]}"'
+    if palette.get("browser"):
+        root_attrs += f' browser="{palette["browser"]}"'
+
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
-        f'<theme name="{name}" variant="{variant}">',
+        root_attrs + ">",
         "  <colors>",
     ]
     for key in BRLS_KEYS:
@@ -350,7 +393,22 @@ def theme_xml(name: str, palette: dict) -> str:
     lines.append(f'    <color key="brls/button/default_enabled_text" value="{palette["text"]}"/>')
     for key in NX_KEYS:
         lines.append(f'    <color key="nxstation/{key}" value="{palette[key]}"/>')
-    lines.extend(["  </colors>", "</theme>", ""])
+    lines.append("  </colors>")
+
+    if palette.get("style"):
+        lines.append("  <style>")
+        for key in sorted(palette["style"]):
+            lines.append(f'    <entry key="{key}" value="{palette["style"][key]}"/>')
+        lines.append("  </style>")
+
+    if palette.get("sections"):
+        lines.append("  <sections>")
+        for section in palette["sections"]:
+            lines.append(f'    <section name="{section}"/>')
+        lines.append("  </sections>")
+
+    lines.append("</theme>")
+    lines.append("")
     return "\n".join(lines)
 
 

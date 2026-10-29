@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <unordered_map>
 
 namespace sf::ui {
@@ -43,13 +44,17 @@ void tuneTheme(brls::Theme& theme, const std::vector<std::pair<std::string, std:
 const char* bundledThemeNames[] = {
     "Vampire",  "Abyss",    "Sunfire",  "Carnage",  "Glacial",  "Mirage",
     "Cyberpunk", "Warlock", "Toxic",    "Horizon",  "Solstice", "Prism",
-    "Iceberg",  "Sunshine", "Flamingo", "Clay",     "Meadow",
+    "Iceberg",  "Sunshine", "Flamingo", "Clay",     "Meadow",   "Aurora",
 };
 
 const std::unordered_map<std::string, std::string> kLegacyThemeNames = {
     {"blue", "Abyss"},     {"orange", "Sunfire"}, {"red", "Carnage"},
     {"cyan", "Glacial"},   {"mustard", "Mirage"}, {"pink", "Cyberpunk"},
     {"maroon", "Warlock"}, {"green", "Toxic"},
+};
+
+const std::vector<std::string> kDefaultDashboardSections = {
+    "hero", "continue", "favourites", "platforms", "metadata",
 };
 
 bool readThemeMeta(const std::string& folderName, std::string* outName, std::string* outVariant)
@@ -169,7 +174,11 @@ void ThemeManager::ensureBundledThemes()
 bool ThemeManager::loadThemeXml(const std::string& name)
 {
     colors_.clear();
+    style_.clear();
+    sections_.clear();
     variant_ = "dark";
+    layout_ = "carousel";
+    schema_ = 1;
     themeRoot_ = FileSystem::join(paths::THEME_DIR, name);
 
     const std::string xmlPath = FileSystem::join(themeRoot_, "theme.xml");
@@ -195,22 +204,48 @@ bool ThemeManager::loadThemeXml(const std::string& name)
         browserStyle_ = browser;
     else
         browserStyle_ = "carousel";
+    if (const char* layout = root->Attribute("layout"))
+        layout_ = layout;
+    if (const char* schema = root->Attribute("schema"))
+        schema_ = std::atoi(schema);
 
-    const tinyxml2::XMLElement* colors = root->FirstChildElement("colors");
-    if (!colors)
-        return false;
-
-    for (const tinyxml2::XMLElement* color = colors->FirstChildElement("color"); color;
-         color = color->NextSiblingElement("color")) {
-        const char* key = color->Attribute("key");
-        const char* value = color->Attribute("value");
-        if (key && value)
-            colors_.emplace_back(key, value);
+    if (const tinyxml2::XMLElement* colors = root->FirstChildElement("colors")) {
+        for (const tinyxml2::XMLElement* color = colors->FirstChildElement("color"); color;
+             color = color->NextSiblingElement("color")) {
+            const char* key = color->Attribute("key");
+            const char* value = color->Attribute("value");
+            if (key && value)
+                colors_.emplace_back(key, value);
+        }
     }
 
-    SF_LOG_I("Theme", "Loaded %zu colors from %s (%s)", colors_.size(), name.c_str(),
-             variant_.c_str());
-    return !colors_.empty();
+    // Schema v2: generic key/value style tokens. Unknown keys are kept as-is so new
+    // features can honor them without changing the format.
+    if (const tinyxml2::XMLElement* style = root->FirstChildElement("style")) {
+        for (const tinyxml2::XMLElement* entry = style->FirstChildElement("entry"); entry;
+             entry = entry->NextSiblingElement("entry")) {
+            const char* key = entry->Attribute("key");
+            const char* value = entry->Attribute("value");
+            if (key && value)
+                style_[key] = value;
+        }
+    }
+
+    if (const tinyxml2::XMLElement* sections = root->FirstChildElement("sections")) {
+        for (const tinyxml2::XMLElement* section = sections->FirstChildElement("section"); section;
+             section = section->NextSiblingElement("section")) {
+            const char* sectionName = section->Attribute("name");
+            if (sectionName)
+                sections_.emplace_back(sectionName);
+        }
+    }
+
+    if (layout_ == "dashboard" && sections_.empty())
+        sections_ = kDefaultDashboardSections;
+
+    SF_LOG_I("Theme", "Loaded %zu colors from %s (%s, schema %d, layout %s)", colors_.size(),
+             name.c_str(), variant_.c_str(), schema_, layout_.c_str());
+    return !colors_.empty() || !style_.empty();
 }
 
 std::string ThemeManager::findThemeAsset(const std::vector<const char*>& fileNames,
@@ -447,6 +482,42 @@ bool ThemeManager::hasColor(const std::string& key) const
     }
 }
 
+bool ThemeManager::hasStyle(const std::string& key) const
+{
+    return style_.count(key) > 0;
+}
+
+std::string ThemeManager::style(const std::string& key, const std::string& fallback) const
+{
+    auto it = style_.find(key);
+    return it != style_.end() ? it->second : fallback;
+}
+
+float ThemeManager::styleNum(const std::string& key, float fallback) const
+{
+    auto it = style_.find(key);
+    if (it == style_.end())
+        return fallback;
+    try {
+        return std::stof(it->second);
+    } catch (...) {
+        return fallback;
+    }
+}
+
+NVGcolor ThemeManager::styleColor(const std::string& key, const std::string& fallbackKey) const
+{
+    auto it = style_.find(key);
+    if (it != style_.end())
+        return parseHexColor(it->second);
+    return color(fallbackKey);
+}
+
+bool ThemeManager::hasSection(const std::string& name) const
+{
+    return std::find(sections_.begin(), sections_.end(), name) != sections_.end();
+}
+
 namespace {
 
 float colorLuminance(NVGcolor c)
@@ -498,6 +569,31 @@ std::string ThemeManager::systemListArtPath(const std::string& systemId) const
     return {};
 }
 
+std::string ThemeManager::systemIconPath(const std::string& systemId) const
+{
+    static const std::vector<const char*> kDirs = {"icons", ""};
+    for (const char* subdir : kDirs) {
+        const std::string dir =
+            subdir[0] != '\0' ? FileSystem::join(themeRoot_, subdir) : themeRoot_;
+        for (const char* ext : {".png", ".jpg", ".jpeg", ".webp"}) {
+            const std::string path = FileSystem::join(dir, systemId + ext);
+            if (FileSystem::exists(path))
+                return path;
+        }
+    }
+    return {};
+}
+
+std::string ThemeManager::headerLogoPath() const
+{
+    for (const char* name : {"header_logo.png", "header_logo.jpg", "header_logo.webp"}) {
+        const std::string path = FileSystem::join(themeRoot_, name);
+        if (FileSystem::exists(path))
+            return path;
+    }
+    return {};
+}
+
 std::string ThemeManager::systemPlaceholderPath() const
 {
     for (const char* name : {"placeholder.jpg", "nxstation.jpg"}) {
@@ -532,6 +628,19 @@ void ThemeManager::applyColors()
     brls::getStyle().addMetric("brls/sidebar/padding_top", 20.0f);
     brls::getStyle().addMetric("brls/sidebar/padding_bottom", 20.0f);
     brls::getStyle().addMetric("brls/listitem/descriptionIndent", 22.0f);
+
+    // Schema v2: numeric brls/* style entries override the metrics above. Non-brls keys
+    // (font_title, card_radius, …) are read by views through style()/styleNum().
+    for (const auto& [key, value] : style_) {
+        if (key.rfind("brls/", 0) != 0)
+            continue;
+        try {
+            brls::getStyle().addMetric(key, std::stof(value));
+        } catch (...) {
+            // Non-numeric style values (hex colors, words) are handled by views.
+        }
+    }
+
     markUiRefresh();
 }
 

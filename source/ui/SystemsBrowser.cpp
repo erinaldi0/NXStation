@@ -1,5 +1,6 @@
 #include "ui/SystemsBrowser.hpp"
 
+#include "ui/DashboardHomeView.hpp"
 #include "ui/SystemBrowserStyle.hpp"
 #include "app/Config.hpp"
 #include "ui/SystemsBrowserData.hpp"
@@ -17,6 +18,8 @@ std::atomic<bool> gBrowserLayoutRefreshRequested{false};
 
 int styleToken()
 {
+    if (ThemeManager::instance().themeForcesDashboard())
+        return 3;
     if (ThemeManager::instance().themeForcesListBrowser())
         return 2;
     return Config::instance().systemBrowserStyle() == SystemBrowserStyle::List ? 1 : 0;
@@ -56,7 +59,9 @@ void SystemsBrowser::rebuildChild()
     }
 
     activeStyle_ = token;
-    if (token == 1 || token == 2)
+    if (token == 3)
+        child_ = new DashboardHomeView();
+    else if (token == 1 || token == 2)
         child_ = new SystemsListTab();
     else
         child_ = new SystemsTab();

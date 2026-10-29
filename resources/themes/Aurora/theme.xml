@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<theme name="Aurora" variant="dark" schema="2" layout="dashboard">
+  <colors>
+    <color key="brls/clear" value="#0A0F1C"/>
+    <color key="brls/background" value="#0B1220"/>
+    <color key="brls/backdrop" value="#060A14B8"/>
+    <color key="brls/text" value="#EEF2FA"/>
+    <color key="brls/text_disabled" value="#5E6E8C"/>
+    <color key="brls/accent" value="#4F8DFF"/>
+    <color key="brls/highlight/background" value="#18243C"/>
+    <color key="brls/highlight/color2" value="#7CB3FF"/>
+    <color key="brls/sidebar/background" value="#0C1220"/>
+    <color key="brls/sidebar/separator" value="#2A3A60"/>
+    <color key="brls/header/subtitle" value="#8CA0C4"/>
+    <color key="brls/list/listItem_value_color" value="#8CA0C4"/>
+    <color key="brls/button/primary_enabled_background" value="#2563EB"/>
+    <color key="brls/button/primary_disabled_background" value="#1A2238"/>
+    <color key="brls/button/default_enabled_background" value="#141C30"/>
+    <color key="brls/highlight/color1" value="#4F8DFF"/>
+    <color key="brls/sidebar/active_item" value="#4F8DFF"/>
+    <color key="brls/header/border" value="#2A3A60"/>
+    <color key="brls/header/rectangle" value="#7CB3FF"/>
+    <color key="brls/button/primary_enabled_text" value="#EEF2FA"/>
+    <color key="brls/button/primary_disabled_text" value="#5E6E8C"/>
+    <color key="brls/button/default_enabled_text" value="#EEF2FA"/>
+    <color key="nxstation/card_bg" value="#141E34"/>
+    <color key="nxstation/card_border" value="#2A3A60"/>
+    <color key="nxstation/dialog_bg" value="#0A1120"/>
+    <color key="nxstation/dialog_border" value="#4F8DFFC0"/>
+    <color key="nxstation/dialog_row" value="#121C30"/>
+    <color key="nxstation/dialog_backdrop" value="#000000A0"/>
+    <color key="nxstation/title_text" value="#F2F6FC"/>
+    <color key="nxstation/detail_text" value="#9CB0D0"/>
+    <color key="nxstation/muted_text" value="#7284A4"/>
+    <color key="nxstation/body_text" value="#B8C8E0"/>
+    <color key="nxstation/preview_text" value="#C8D8F0"/>
+    <color key="nxstation/hint_text" value="#6880A0"/>
+    <color key="nxstation/count_text" value="#8AA0C0"/>
+    <color key="nxstation/log_success" value="#4F8DFF"/>
+    <color key="nxstation/log_failure" value="#FF6B6B"/>
+    <color key="nxstation/log_progress" value="#7CB3FF"/>
+    <color key="nxstation/log_neutral" value="#B0B8C8"/>
+    <color key="nxstation/overlay_bg" value="#0A1120"/>
+    <color key="nxstation/favorite_text" value="#FFFFFF"/>
+  </colors>
+  <style>
+    <entry key="badge_bg" value="#18243C"/>
+    <entry key="badge_radius" value="14"/>
+    <entry key="brand_subtitle" value="Your retro collection"/>
+    <entry key="card_image_height" value="120"/>
+    <entry key="card_padding" value="10"/>
+    <entry key="card_radius" value="12"/>
+    <entry key="card_width" value="160"/>
+    <entry key="focus_glow" value="#4F8DFF80"/>
+    <entry key="font_body" value="17"/>
+    <entry key="font_meta" value="14"/>
+    <entry key="font_section" value="20"/>
+    <entry key="font_title" value="28"/>
+    <entry key="hero_size" value="180"/>
+    <entry key="pill_height" value="44"/>
+    <entry key="section_gap" value="14"/>
+  </style>
+  <sections>
+    <section name="hero"/>
+    <section name="continue"/>
+    <section name="favourites"/>
+    <section name="platforms"/>
+    <section name="metadata"/>
+  </sections>
+</theme>
