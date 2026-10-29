@@ -323,7 +323,7 @@ PALETTES = {
         "brand_font": "28", "brand_sub_font": "13", "count_font": "17",
         "hero_title_font": "30", "hero_meta_font": "14", "hero_desc_font": "15",
         "hero_desc_height": "90", "hero_desc_lines": "4", "hero_gap": "20", "hero_fixed_height": "250",
-        "hero_badge_pad": "10", "hero_badge_gap": "8",
+        "hero_badge_pad": "10", "hero_badge_gap": "8", "meta_badge_pad": "10", "meta_badge_gap": "8",
         "hero_image_align": "center",
         "card_title_font": "17", "card_detail_font": "14", "card_gap": "10",
         "card_image_align": "center", "card_image_radius": "8",

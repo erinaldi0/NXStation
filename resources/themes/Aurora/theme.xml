@@ -89,6 +89,8 @@
     <entry key="hero_title_font" value="30"/>
     <entry key="hero_width_pct" value="66.7"/>
     <entry key="hint_font" value="14"/>
+    <entry key="meta_badge_gap" value="8"/>
+    <entry key="meta_badge_pad" value="10"/>
     <entry key="meta_key_font" value="13"/>
     <entry key="meta_key_width" value="110"/>
     <entry key="meta_row_gap" value="6"/>

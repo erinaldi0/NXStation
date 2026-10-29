@@ -701,7 +701,6 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
 
     // When hero_fixed_height is set, the section gets a fixed height and the row
     // grows to fill the remaining space. The middle column then fills the row height.
-    // This prevents badges/description from pushing the layout.
     if (fixedHeight > 0.f) {
         middle->setGrow(1.f);
     }
@@ -721,15 +720,6 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     heroMeta_->setWidth(textWidth);
     middle->addView(heroMeta_);
 
-    heroBadgeRow_ = new brls::Box();
-    heroBadgeRow_->setAxis(brls::Axis::ROW);
-    heroBadgeRow_->setPadding(token("hero_badge_pad", 10.f), 0, token("hero_badge_pad", 10.f), 0);
-    heroBadgeRow_->setWidth(textWidth);
-    // Cap badge row height so multiple badges don't push description down.
-    const float badgeRowHeight = token("badge_height", 26.f) + token("hero_badge_pad", 10.f) * 2;
-    heroBadgeRow_->setHeight(badgeRowHeight);
-    middle->addView(heroBadgeRow_);
-
     const int descLines = std::max(1, static_cast<int>(token("hero_desc_lines", 4.f)));
 
     auto* desc = new MultilineLabel();
@@ -741,10 +731,6 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     desc->setVerticalAlign(brls::VerticalAlign::TOP);
     desc->setWidth(textWidth);
     desc->setAnimated(false);
-    // Description fills remaining space in middle, but truncates at maxLines.
-    if (fixedHeight > 0.f) {
-        desc->setGrow(1.f);
-    }
     if (ThemeManager::instance().hasStyle("hero_desc_height"))
         desc->setMinHeight(token("hero_desc_height", 90.f));
     heroDescription_ = desc;
@@ -1068,6 +1054,15 @@ brls::Box* DashboardHomeView::buildMetadataSection()
         section->addView(row);
     }
 
+    // Badge row at the bottom of Details (tags like Remote, No metadata, etc.)
+    auto* badgeRow = new brls::Box();
+    badgeRow->setAxis(brls::Axis::ROW);
+    badgeRow->setAlignItems(brls::AlignItems::CENTER);
+    badgeRow->setPadding(token("meta_badge_pad", 10.f), 0, token("meta_badge_pad", 10.f), 0);
+    badgeRow->setHeight(token("badge_height", 26.f) + token("meta_badge_pad", 10.f) * 2);
+    metaBadgeRow_ = badgeRow;
+    section->addView(badgeRow);
+
     return section;
 }
 
@@ -1078,13 +1073,13 @@ void DashboardHomeView::setMetaRow(const std::string& key, const std::string& va
         it->second->setText(value.empty() ? "—" : value);
 }
 
-void DashboardHomeView::setHeroBadge(const std::string& text)
+void DashboardHomeView::setMetaBadge(const std::string& text)
 {
-    if (!heroBadgeRow_)
+    if (!metaBadgeRow_)
         return;
     auto* badge = makeBadge(text);
-    badge->setMarginRight(token("hero_badge_gap", 8.f));
-    heroBadgeRow_->addView(badge);
+    badge->setMarginRight(token("meta_badge_gap", 8.f));
+    metaBadgeRow_->addView(badge);
 }
 
 void DashboardHomeView::updateHero(const GameItem* game)
@@ -1105,16 +1100,17 @@ void DashboardHomeView::updateHero(const GameItem* game)
                                      : "  |  " + releaseYear(game->meta.releaseDate)))
                              : "—");
 
-    heroBadgeRow_->clearViews(false);
+    if (metaBadgeRow_)
+        metaBadgeRow_->clearViews(false);
     if (game) {
         if (game->cloudAvailable)
-            setHeroBadge("Remote");
+            setMetaBadge("Remote");
         else if (game->fromRomM)
-            setHeroBadge("Downloaded");
+            setMetaBadge("Downloaded");
         if (game->discCount > 1)
-            setHeroBadge(std::to_string(game->discCount) + " discs");
+            setMetaBadge(std::to_string(game->discCount) + " discs");
         if (!game->meta.scraped)
-            setHeroBadge("No metadata");
+            setMetaBadge("No metadata");
     }
 
     heroDescription_->setText(game && !game->meta.description.empty()

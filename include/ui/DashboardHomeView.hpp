@@ -94,7 +94,7 @@ private:
     const GameItem* pickRandomGame(const std::string& systemId);
 
     void updateHero(const GameItem* game);
-    void setHeroBadge(const std::string& text);
+    void setMetaBadge(const std::string& text);
     void setMetaRow(const std::string& key, const std::string& value);
 
     uint32_t themeGenApplied_ = 0;
@@ -108,7 +108,7 @@ private:
     brls::Label* heroTitle_ = nullptr;
     brls::Label* heroMeta_ = nullptr;
     brls::Label* heroDescription_ = nullptr;
-    brls::Box* heroBadgeRow_ = nullptr;
+    brls::Box* metaBadgeRow_ = nullptr;  // badges moved to Details section
     std::unordered_map<std::string, brls::Label*> metaLabels_;
     GameItem heroGame_;
     std::mt19937 rng_;

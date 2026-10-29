@@ -43,6 +43,8 @@
     <entry key="hero_fixed_height" value="250"/>  <!-- 0 = auto (content-based) -->
     <entry key="hero_badge_pad" value="10"/>
     <entry key="hero_badge_gap" value="8"/>
+    <entry key="meta_badge_pad" value="10"/>
+    <entry key="meta_badge_gap" value="8"/>
     <entry key="hero_image_align" value="center"/>
     <entry key="card_title_font" value="17"/>
     <entry key="card_detail_font" value="14"/>
