@@ -35,9 +35,30 @@ float token(const char* key, float fallback)
     return ThemeManager::instance().styleNum(key, fallback);
 }
 
+// Per-component token with a chain fallback: use `primary` when the theme
+// defines it, otherwise fall back to the shared `secondary` token (whose own
+// fallback is `hardDefault`, i.e. the previous hardcoded value).
+float tokenChain(const char* primary, const char* secondary, float hardDefault)
+{
+    if (ThemeManager::instance().hasStyle(primary))
+        return ThemeManager::instance().styleNum(primary, hardDefault);
+    return token(secondary, hardDefault);
+}
+
 std::string tokenStr(const char* key, const char* fallback)
 {
     return ThemeManager::instance().style(key, fallback);
+}
+
+// Image position token: "left" | "center" | "right".
+brls::ImageAlignment imageAlign(const char* key, brls::ImageAlignment fallback)
+{
+    const std::string value = ThemeManager::instance().style(key, "");
+    if (value == "left")
+        return brls::ImageAlignment::LEFT;
+    if (value == "right")
+        return brls::ImageAlignment::RIGHT;
+    return fallback;
 }
 
 NVGcolor mutedColor()
@@ -76,7 +97,10 @@ std::string releaseYear(const std::string& date)
 void DashboardCell::onFocusGained()
 {
     brls::Box::onFocusGained();
-    setBorderColor(ThemeManager::instance().styleColor("focus_glow", "brls/highlight/color1"));
+    const auto& theme = ThemeManager::instance();
+    if (theme.hasStyle("focus_glow"))
+        setBorderColor(theme.styleColor("focus_glow", "brls/highlight/color1"));
+    setBorderThickness(theme.styleNum("focus_glow_width", 2.f));
     if (owner_)
         owner_->onCellFocused(this);
 }
@@ -105,11 +129,9 @@ brls::View* DashboardHomeView::create()
 
 void DashboardHomeView::registerActions()
 {
-    auto consume = [](brls::View*) { return true; };
-    registerAction("", brls::ControllerButton::BUTTON_NAV_UP, consume, true, true);
-    registerAction("", brls::ControllerButton::BUTTON_NAV_DOWN, consume, true, true);
-    registerAction("", brls::ControllerButton::BUTTON_NAV_LEFT, consume, true, true);
-    registerAction("", brls::ControllerButton::BUTTON_NAV_RIGHT, consume, true, true);
+    // No nav-button actions here on purpose: Borealis moves focus between the
+    // focusable cells when nothing consumes the D-pad. A handler that returns
+    // true would swallow every ↑↓←→ and freeze the focus chain.
 
     registerAction("Open", brls::ControllerButton::BUTTON_A, [this](brls::View*) {
         // Actions bubble from the focused cell up to this view, so resolve focus through
@@ -230,7 +252,7 @@ brls::Box* DashboardHomeView::makeSectionHeader(const std::string& title,
     auto* row = new brls::Box();
     row->setAxis(brls::Axis::ROW);
     row->setAlignItems(brls::AlignItems::BASELINE);
-    row->setPadding(0, 0, 10, 0);
+    row->setPadding(0, 0, token("header_gap", 10.f), 0);
 
     auto* label = new brls::Label();
     label->setText(title);
@@ -268,11 +290,12 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float 
     cell->setFocusable(true);
     cell->setFocusSound(brls::SOUND_NONE);
     cell->setHideHighlight(true);
+    cell->setMarginRight(token("card_gap", 10.f));
 
     auto* image = new brls::Image();
     image->setDimensions(width - pad * 2, imageHeight);
     image->setScalingType(brls::ImageScalingType::FIT);
-    image->setImageAlign(brls::ImageAlignment::CENTER);
+    image->setImageAlign(imageAlign("card_image_align", brls::ImageAlignment::CENTER));
     const std::string art = game.meta.boxArtPath;
     const std::string path =
         firstExistingPath({art, theme.boxPlaceholderPath(), sf::gameArtPlaceholderPath()});
@@ -282,7 +305,7 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float 
 
     auto* title = new brls::Label();
     title->setText(game.meta.title.empty() ? game.displayName : game.meta.title);
-    title->setFontSize(token("font_body", 17.f));
+    title->setFontSize(tokenChain("card_title_font", "font_body", 17.f));
     title->setTextColor(theme.color("nxstation/title_text"));
     title->setSingleLine(true);
     title->setAnimated(false);
@@ -291,7 +314,7 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float 
     if (!detail.empty()) {
         auto* detailLabel = new brls::Label();
         detailLabel->setText(detail);
-        detailLabel->setFontSize(token("font_meta", 14.f));
+        detailLabel->setFontSize(tokenChain("card_detail_font", "font_meta", 14.f));
         detailLabel->setTextColor(theme.color("nxstation/detail_text"));
         detailLabel->setSingleLine(true);
         detailLabel->setAnimated(false);
@@ -310,7 +333,8 @@ brls::Box* DashboardHomeView::makePill(const std::string& systemId)
     auto* pill = new DashboardCell(this, systemId, {}, true);
     pill->setAxis(brls::Axis::ROW);
     pill->setAlignItems(brls::AlignItems::CENTER);
-    pill->setPadding(0, 14, 0, 14);
+    const float pillPad = token("pill_padding", 14.f);
+    pill->setPadding(0, pillPad, 0, pillPad);
     pill->setHeight(height);
     pill->setCornerRadius(radius);
     pill->setBackgroundColor(theme.color("nxstation/card_bg"));
@@ -323,20 +347,20 @@ brls::Box* DashboardHomeView::makePill(const std::string& systemId)
     const std::string icon = theme.systemIconPath(systemId);
     if (!icon.empty()) {
         auto* image = new brls::Image();
-        image->setDimensions(26.f, 26.f);
+        image->setDimensions(token("pill_icon", 26.f), token("pill_icon", 26.f));
         image->setScalingType(brls::ImageScalingType::FIT);
         image->setImageFromFile(icon);
         pill->addView(image);
 
         auto* spacer = new brls::Box();
         spacer->setHeight(1.f);
-        spacer->setMarginRight(8);
+        spacer->setMarginRight(token("pill_icon_gap", 8.f));
         pill->addView(spacer);
     }
 
     auto* label = new brls::Label();
     label->setText(browser::systemDisplayName(systemId));
-    label->setFontSize(token("font_body", 17.f));
+    label->setFontSize(tokenChain("pill_font", "font_body", 17.f));
     label->setTextColor(theme.color("nxstation/favorite_text"));
     label->setSingleLine(true);
     label->setAnimated(false);
@@ -349,19 +373,19 @@ brls::Box* DashboardHomeView::makePill(const std::string& systemId)
 brls::Box* DashboardHomeView::makeBadge(const std::string& text)
 {
     auto& theme = ThemeManager::instance();
-    const float height = 26.f;
+    const float height = token("badge_height", 26.f);
 
     auto* badge = new brls::Box();
     badge->setAxis(brls::Axis::ROW);
     badge->setAlignItems(brls::AlignItems::CENTER);
-    badge->setPadding(0, 12, 0, 12);
+    badge->setPadding(0, token("badge_padding", 12.f), 0, token("badge_padding", 12.f));
     badge->setHeight(height);
     badge->setCornerRadius(std::min(token("badge_radius", 14.f), height / 2.f));
     badge->setBackgroundColor(theme.styleColor("badge_bg", "brls/highlight/background"));
 
     auto* label = new brls::Label();
     label->setText(text);
-    label->setFontSize(token("font_meta", 14.f));
+    label->setFontSize(tokenChain("badge_font", "font_meta", 14.f));
     label->setTextColor(theme.color("brls/text"));
     label->setSingleLine(true);
     label->setAnimated(false);
@@ -377,19 +401,20 @@ void DashboardHomeView::buildTopBar()
     auto* row = new brls::Box();
     row->setAxis(brls::Axis::ROW);
     row->setAlignItems(brls::AlignItems::CENTER);
-    row->setPadding(0, 0, 18, 0);
+    row->setPadding(0, 0, token("topbar_gap", 18.f), 0);
 
     const std::string logo = theme.headerLogoPath();
     if (!logo.empty()) {
+        const float logoSize = token("topbar_logo", 44.f);
         auto* image = new brls::Image();
-        image->setDimensions(44.f, 44.f);
+        image->setDimensions(logoSize, logoSize);
         image->setScalingType(brls::ImageScalingType::FIT);
         image->setImageFromFile(logo);
         row->addView(image);
 
         auto* spacer = new brls::Box();
         spacer->setHeight(1.f);
-        spacer->setMarginRight(14);
+        spacer->setMarginRight(token("brand_gap", 14.f));
         row->addView(spacer);
     }
 
@@ -398,7 +423,7 @@ void DashboardHomeView::buildTopBar()
 
     auto* title = new brls::Label();
     title->setText("NXStation");
-    title->setFontSize(token("font_title", 28.f));
+    title->setFontSize(tokenChain("brand_font", "font_title", 28.f));
     title->setTextColor(theme.color("brls/text"));
     title->setSingleLine(true);
     title->setAnimated(false);
@@ -406,7 +431,7 @@ void DashboardHomeView::buildTopBar()
 
     auto* subtitle = new brls::Label();
     subtitle->setText(tokenStr("brand_subtitle", "Your retro collection"));
-    subtitle->setFontSize(token("font_meta", 13.f));
+    subtitle->setFontSize(tokenChain("brand_sub_font", "font_meta", 13.f));
     subtitle->setTextColor(theme.color("brls/header/subtitle"));
     subtitle->setSingleLine(true);
     subtitle->setAnimated(false);
@@ -424,7 +449,7 @@ void DashboardHomeView::buildTopBar()
 
     auto* count = new brls::Label();
     count->setText(std::to_string(total) + (total == 1 ? " game" : " games"));
-    count->setFontSize(token("font_body", 17.f));
+    count->setFontSize(tokenChain("count_font", "font_body", 17.f));
     count->setTextColor(theme.color("nxstation/count_text"));
     count->setSingleLine(true);
     count->setAnimated(false);
@@ -439,12 +464,14 @@ void DashboardHomeView::buildHeroSection()
     const float heroSize = token("hero_size", 180.f);
     const float radius = token("card_radius", 12.f);
     const float pad = token("card_padding", 10.f);
+    const float heroImageW = token("hero_image_width", heroSize - pad * 2);
+    const float heroImageH = token("hero_image_height", heroSize - pad * 2);
 
     // Hero card (focusable — shows the focused game, like the reference layout).
     heroImage_ = new brls::Image();
-    heroImage_->setDimensions(heroSize - pad * 2, heroSize - pad * 2);
+    heroImage_->setDimensions(heroImageW, heroImageH);
     heroImage_->setScalingType(brls::ImageScalingType::FIT);
-    heroImage_->setImageAlign(brls::ImageAlignment::CENTER);
+    heroImage_->setImageAlign(imageAlign("hero_image_align", brls::ImageAlignment::CENTER));
 
     auto& games = AppState::instance().gamesFor(systemIds_.empty() ? std::string() : systemIds_.front());
 
@@ -463,33 +490,32 @@ void DashboardHomeView::buildHeroSection()
     auto* middle = new brls::Box();
     middle->setAxis(brls::Axis::COLUMN);
     middle->setGrow(1.f);
-    middle->setMarginLeft(20);
+    middle->setMarginLeft(token("hero_gap", 20.f));
 
     heroTitle_ = new brls::Label();
-    heroTitle_->setFontSize(token("font_title", 28.f));
+    heroTitle_->setFontSize(tokenChain("hero_title_font", "font_title", 28.f));
     heroTitle_->setTextColor(theme.color("nxstation/title_text"));
     heroTitle_->setSingleLine(true);
     heroTitle_->setAnimated(false);
     middle->addView(heroTitle_);
 
     heroMeta_ = new brls::Label();
-    heroMeta_->setFontSize(token("font_meta", 14.f));
-    heroMeta_->setTextColor(theme.color("nxstation/detail_text"));
+    heroMeta_->setFontSize(tokenChain("hero_meta_font", "font_meta", 14.f));
     heroMeta_->setSingleLine(true);
     heroMeta_->setAnimated(false);
     middle->addView(heroMeta_);
 
     heroBadgeRow_ = new brls::Box();
     heroBadgeRow_->setAxis(brls::Axis::ROW);
-    heroBadgeRow_->setPadding(10, 0, 10, 0);
+    heroBadgeRow_->setPadding(token("hero_badge_pad", 10.f), 0, token("hero_badge_pad", 10.f), 0);
     middle->addView(heroBadgeRow_);
 
     heroDescription_ = new brls::Label();
-    heroDescription_->setFontSize(token("font_body", 17.f));
+    heroDescription_->setFontSize(tokenChain("hero_desc_font", "font_body", 17.f));
     heroDescription_->setTextColor(theme.color("nxstation/body_text"));
     heroDescription_->setSingleLine(false);
     heroDescription_->setLineHeight(1.4f);
-    heroDescription_->setHeight(token("description_height", 90.f));
+    heroDescription_->setHeight(tokenChain("hero_desc_height", "description_height", 90.f));
     middle->addView(heroDescription_);
 
     auto* row = new brls::Box();
@@ -525,7 +551,7 @@ void DashboardHomeView::buildGamesSection(const std::string& headerTitle,
     const float cardWidth = token("card_width", 160.f);
     const float cardImage = token("card_image_height", 120.f);
 
-    for (size_t i = 0; i < games.size() && i < static_cast<size_t>(kMaxRowCards); ++i) {
+    for (size_t i = 0; i < games.size() && i < static_cast<size_t>(token("row_cards", kMaxRowCards)); ++i) {
         const GameItem& game = games[i];
         const std::string detail = game.systemId.empty()
                                        ? game.meta.genre
@@ -557,7 +583,7 @@ void DashboardHomeView::buildPlatformsSection()
 
     for (const auto& id : platforms) {
         auto* pill = makePill(id);
-        pill->setMarginRight(10);
+        pill->setMarginRight(token("pill_gap", 10.f));
         if (!firstFocusable_)
             firstFocusable_ = pill;
         row->addView(pill);
@@ -576,20 +602,20 @@ void DashboardHomeView::buildMetadataSection()
     for (const char* key : kKeys) {
         auto* row = new brls::Box();
         row->setAxis(brls::Axis::ROW);
-        row->setPadding(0, 0, 6, 0);
+        row->setPadding(0, 0, token("meta_row_gap", 6.f), 0);
 
         auto* keyLabel = new brls::Label();
         keyLabel->setText(key);
-        keyLabel->setFontSize(token("font_meta", 14.f));
+        keyLabel->setFontSize(tokenChain("meta_key_font", "font_meta", 14.f));
         keyLabel->setTextColor(mutedColor());
         keyLabel->setSingleLine(true);
         keyLabel->setAnimated(false);
-        keyLabel->setDimensions(110.f, 20.f);
+        keyLabel->setDimensions(token("meta_key_width", 110.f), 20.f);
         row->addView(keyLabel);
 
         auto* valueLabel = new brls::Label();
         valueLabel->setText("—");
-        valueLabel->setFontSize(token("font_body", 17.f));
+        valueLabel->setFontSize(tokenChain("meta_value_font", "font_body", 17.f));
         valueLabel->setTextColor(ThemeManager::instance().color("nxstation/detail_text"));
         valueLabel->setSingleLine(true);
         valueLabel->setAnimated(false);
@@ -613,7 +639,7 @@ void DashboardHomeView::setHeroBadge(const std::string& text)
     if (!heroBadgeRow_)
         return;
     auto* badge = makeBadge(text);
-    badge->setMarginRight(8);
+    badge->setMarginRight(token("hero_badge_gap", 8.f));
     heroBadgeRow_->addView(badge);
 }
 
@@ -699,7 +725,7 @@ void DashboardHomeView::rebuild()
     auto& theme = ThemeManager::instance();
     auto* hints = new brls::Label();
     hints->setText("↑ ↓ Sections   ·   ← → Cards   ·   A Open   ·   Y Menu   ·   - Screensaver   ·   + Settings");
-    hints->setFontSize(theme.styleNum("font_meta", 14.f));
+    hints->setFontSize(tokenChain("hint_font", "font_meta", 14.f));
     hints->setTextColor(theme.color("nxstation/hint_text"));
     hints->setSingleLine(true);
     hints->setAnimated(false);

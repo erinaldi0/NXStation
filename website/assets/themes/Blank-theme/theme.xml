@@ -25,8 +25,42 @@
     <entry key="card_image_height" value="120"/>
     <entry key="section_gap" value="14"/>
     <entry key="focus_glow" value="#50FA7B80"/>
+    <entry key="focus_glow_width" value="2"/>
     <entry key="badge_bg" value="#301C48"/>
     <entry key="brand_subtitle" value="Your retro collection"/>
+    <!-- Per-component sizing: every value falls back to the shared tokens above. -->
+    <entry key="topbar_logo" value="44"/>
+    <entry key="topbar_gap" value="18"/>
+    <entry key="brand_font" value="28"/>
+    <entry key="brand_sub_font" value="13"/>
+    <entry key="count_font" value="17"/>
+    <entry key="hero_title_font" value="28"/>
+    <entry key="hero_meta_font" value="14"/>
+    <entry key="hero_desc_font" value="17"/>
+    <entry key="hero_desc_height" value="90"/>
+    <entry key="hero_badge_pad" value="10"/>
+    <entry key="hero_badge_gap" value="8"/>
+    <entry key="hero_image_align" value="center"/>
+    <entry key="card_title_font" value="17"/>
+    <entry key="card_detail_font" value="14"/>
+    <entry key="card_gap" value="10"/>
+    <entry key="card_image_align" value="center"/>
+    <entry key="card_image_align" value="center"/>
+    <entry key="row_cards" value="8"/>
+    <entry key="pill_padding" value="14"/>
+    <entry key="pill_icon" value="26"/>
+    <entry key="pill_icon_gap" value="8"/>
+    <entry key="pill_font" value="17"/>
+    <entry key="pill_gap" value="10"/>
+    <entry key="badge_height" value="26"/>
+    <entry key="badge_font" value="14"/>
+    <entry key="badge_padding" value="12"/>
+    <entry key="meta_key_width" value="110"/>
+    <entry key="meta_row_gap" value="6"/>
+    <entry key="meta_key_font" value="14"/>
+    <entry key="meta_value_font" value="17"/>
+    <entry key="header_gap" value="10"/>
+    <entry key="hint_font" value="14"/>
   </style>
   <sections>
     <section name="hero"/>
