@@ -661,9 +661,10 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     const float heroImageW = token("hero_image_width", 140.f);
     const float fixedHeight = token("hero_fixed_height", 0.f);
 
-    // Hero tile (focusable): wraps tightly around the shape of the cover image.
+    // Hero tile (focusable): fixed height, variable width based on cover aspect ratio.
+    // The image scales to fit the card height, centered. The card width adjusts
+    // to the image's natural width at that height, so the middle column never shifts.
     heroImage_ = new brls::Image();
-    heroImage_->setWidth(heroImageW);
     heroImage_->setCornerRadius(imageRadius("hero_image_radius", radius, pad, 4.f));
     heroImage_->setScalingType(brls::ImageScalingType::FIT);
     heroImage_->setImageAlign(imageAlign("hero_image_align", brls::ImageAlignment::CENTER));
@@ -675,11 +676,11 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     const auto& recentGames = AppState::instance().gamesFor(kLastPlayedSystemId);
     const GameItem heroSeed = recentGames.empty() ? GameItem{} : recentGames.front();
     setCoverArt(heroImage_, heroSeed);
-    heroImage_->setHeight(wrappedImageHeight(heroImage_, heroImageW,
-                                             token("hero_image_height", heroImageW * 1.4f)));
 
     auto* card = new DashboardCell(this, heroSeed.systemId, heroSeed.path, heroSeed.path.empty());
     card->setAxis(brls::Axis::COLUMN);
+    card->setAlignItems(brls::AlignItems::CENTER);
+    card->setJustifyContent(brls::JustifyContent::CENTER);
     card->setPadding(pad, pad, pad, pad);
     card->setCornerRadius(radius);
     card->setBackgroundColor(theme.color("nxstation/card_bg"));
@@ -688,6 +689,22 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     card->setFocusSound(brls::SOUND_NONE);
     card->setHideHighlight(true);
     card->addView(heroImage_);
+
+    // Fixed height for the card when hero_fixed_height is set.
+    // The image will scale to fit this height (maintaining aspect ratio),
+    // and the card width will be the image's scaled width + padding.
+    if (fixedHeight > 0.f) {
+        const float cardHeight = fixedHeight - 44.f; // section - header
+        card->setHeight(cardHeight);
+        heroImage_->setHeight(cardHeight - pad * 2);
+        // Width is not set - it will be determined by the image's aspect ratio
+        // at the fixed height. The row uses flex so middle takes remaining space.
+    } else {
+        // Auto mode: use the token width as before.
+        heroImage_->setWidth(heroImageW);
+        heroImage_->setHeight(wrappedImageHeight(heroImage_, heroImageW,
+                                                 token("hero_image_height", heroImageW * 1.4f)));
+    }
 
     // The text column needs an explicit width for labels to wrap (Borealis labels
     // only wrap when their width is constrained).
@@ -1118,11 +1135,20 @@ void DashboardHomeView::updateHero(const GameItem* game)
                                   : "No description — scrape from the Y menu to fill in metadata.");
 
     if (heroImage_) {
-        const float w = token("hero_image_width", 140.f);
+        const float fixedHeight = token("hero_fixed_height", 0.f);
         setCoverArt(heroImage_, game ? *game : GameItem{});
-        // The tile adapts to the newly focused cover's shape.
-        heroImage_->setHeight(wrappedImageHeight(heroImage_, w,
-                                                 token("hero_image_height", w * 1.4f)));
+        if (fixedHeight > 0.f) {
+            // Fixed height mode: image scales to fit card height, width adjusts automatically.
+            const float cardHeight = fixedHeight - 44.f; // section - header
+            heroImage_->setHeight(cardHeight - token("hero_tile_padding", 4.f) * 2);
+            // Width not set - FIT scaling + CENTER alignment handles it.
+        } else {
+            // Auto mode: use token width, height from aspect ratio.
+            const float w = token("hero_image_width", 140.f);
+            heroImage_->setWidth(w);
+            heroImage_->setHeight(wrappedImageHeight(heroImage_, w,
+                                                     token("hero_image_height", w * 1.4f)));
+        }
     }
 
     if (!metaLabels_.empty()) {
