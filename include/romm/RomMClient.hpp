@@ -7,6 +7,7 @@
 #include <vector>
 #include <optional>
 #include <functional>
+#include <atomic>
 
 namespace sf::romm {
 
@@ -152,7 +153,8 @@ public:
 
     // Library API
     bool fetchLibrary(std::vector<RomMLibraryEntry>& out,
-                      const std::function<void(int fetched, int total)>& progress = {});
+                      const std::function<void(int fetched, int total)>& progress = {},
+                      std::atomic<bool>* abort = nullptr);
     /** Single ROM as SimpleRomSchema; used when the list response omits the `files` array. */
     bool fetchSimpleRom(const std::string& romId, RomMLibraryEntry& out);
     bool downloadRom(const std::string& romId, const std::string& fileName,

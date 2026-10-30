@@ -74,6 +74,12 @@ public:
     bool isAbortRequested() const { return abortRequested_.load(); }
 
     /**
+     * The abort flag itself, so a batch and the library fetch that feeds it can share one flag and
+     * stop from a single B press.
+     */
+    std::atomic<bool>& abortFlag() { return abortRequested_; }
+
+    /**
      * Entries the fetcher can write to: a matched system plus either a downloaded ROM or, when
      * `artForRemoteRoms` is on, a remote row (images are resolved by stem, so no ROM file is
      * needed for those).

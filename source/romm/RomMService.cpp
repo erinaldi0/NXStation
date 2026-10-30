@@ -351,23 +351,47 @@ void RomMService::fetchArtForEntry(const LibraryEntry& entry, std::atomic<bool>*
     art_->fetchEntryArt(entry, progress, nullptr, abort);
 }
 
-void RomMService::refreshLibraryAsync(std::function<void(bool, const std::string&)> done) {
+void RomMService::refreshLibraryAsync(std::function<void(bool, const std::string&)> done,
+                                      ArtProgressCb onProgress, std::atomic<bool>* abort) {
     refreshConfig();
     if (!enabled_ || !client_.isReady()) {
         if (done) done(false, "RomM not configured or authenticated");
         return;
     }
 
-    AppState::instance().pool().enqueue([this, done = std::move(done)]() mutable {
+    AppState::instance().pool().enqueue([this, done = std::move(done), onProgress = std::move(onProgress),
+                                         abort]() mutable {
+        // Both stages report through the same callback, marshalled to the main thread, so one
+        // progress page covers the paginated fetch and the art batch.
+        auto report = [&onProgress](const sf::ScrapeProgress& progress) {
+            sf::ScrapeProgress copy = progress;
+            brls::sync([onProgress, copy]() {
+                if (onProgress)
+                    onProgress(copy);
+            });
+        };
+
         std::vector<LibraryEntry> out;
-        bool ok = library_->fetchLibrary(out);
+        sf::ScrapeProgress progress;
+        bool ok = library_->fetchLibrary(out, [&](int fetched, int total) {
+            progress.index = static_cast<size_t>(fetched);
+            progress.total = static_cast<size_t>(total);
+            progress.phase = "Library";
+            progress.detail = "Fetched";
+            progress.hasResult = true;
+            progress.success = true;
+            report(progress);
+        }, abort);
         std::string message = ok ? "Library refreshed" : client_.lastError();
 
         // The server already has the provider images cached, so art for anything still missing is
-        // one GET per asset here instead of a hash + API query + rate-limited download per ROM.
-        if (ok && config_.fetchArtFromRomM && art_) {
-            const ArtBatchStats stats = art_->fetchBatchBlocking(out, nullptr, nullptr);
-            if (stats.succeeded + stats.failed > 0) {
+        // one GET per asset here instead of a hash + API query + rate-limited download per ROM. The
+        // batch only walks entries that still need work, so a rerun picks up where it stopped.
+        if (ok && config_.fetchArtFromRomM && art_ && !(abort && abort->load())) {
+            const ArtBatchStats stats = art_->fetchBatchBlocking(out, [&report](const sf::ScrapeProgress& p) {
+                report(p);
+            }, abort);
+            if (stats.succeeded + stats.failed + stats.skipped > 0) {
                 message += " — art " + std::to_string(stats.succeeded) + " fetched, "
                            + std::to_string(stats.failed) + " failed, "
                            + std::to_string(stats.skipped) + " skipped";

@@ -41,7 +41,8 @@ public:
 
     /** Fetch the user's RomM library. */
     bool fetchLibrary(std::vector<LibraryEntry>& out,
-                      std::function<void(int, int)> progress = {});
+                      std::function<void(int, int)> progress = {},
+                      std::atomic<bool>* abort = nullptr);
 
     /** Match RomM ROMs to NXStation systems. */
     void matchToSystems(std::vector<LibraryEntry>& entries);

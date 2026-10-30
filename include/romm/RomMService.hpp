@@ -67,8 +67,15 @@ public:
     /** Populate the "romm" virtual system in AppState from the library cache (main thread). */
     void populateVirtualLibrary();
 
-    /** Fetch the library on a worker thread, persist the cache, then populate + refresh UI. */
-    void refreshLibraryAsync(std::function<void(bool, const std::string&)> done);
+    /**
+     * Fetch the library on a worker thread, persist the cache, then fetch art for the entries
+     * still missing it. `onProgress` reports both stages — `phase == "Library"` for the paginated
+     * fetch, then one row per ROM for the batch — so a progress view can show it live. `abort`
+     * should be the fetcher's flag, so one B press stops the fetch and the batch together.
+     */
+    void refreshLibraryAsync(std::function<void(bool, const std::string&)> done,
+                             ArtProgressCb onProgress = nullptr,
+                             std::atomic<bool>* abort = nullptr);
 
     /** Download one library entry on a worker thread; registers the mapping + saves the cache. */
     void downloadRomAsync(const LibraryEntry& entry,

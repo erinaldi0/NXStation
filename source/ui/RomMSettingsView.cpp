@@ -272,8 +272,13 @@ private:
  */
 class RomMArtFetchView : public brls::Box {
 public:
-    explicit RomMArtFetchView(std::function<void(bool)> onFinished)
-        : onFinished_(std::move(onFinished)) {
+    /**
+     * `fetchLibraryFirst` runs the paginated library fetch before the batch, so the same page shows
+     * both stages: `Library n/m` while paging, then `ROM n/m — name` per asset. The settings row
+     * uses it; `Fetch Art Now` leaves it false and batches the cached entries.
+     */
+    explicit RomMArtFetchView(std::function<void(bool)> onFinished, bool fetchLibraryFirst = false)
+        : onFinished_(std::move(onFinished)), fetchLibraryFirst_(fetchLibraryFirst) {
         auto& theme = ThemeManager::instance();
         this->setAxis(brls::Axis::COLUMN);
         this->setGrow(1.0f);
@@ -287,7 +292,7 @@ public:
         titleLabel_->setFontSize(32);
         titleLabel_->setHorizontalAlign(brls::HorizontalAlign::CENTER);
         titleLabel_->setTextColor(theme.color("brls/text"));
-        titleLabel_->setText("Fetch Art from RomM");
+        titleLabel_->setText(fetchLibraryFirst_ ? "Refresh Library + Fetch Art" : "Fetch Art from RomM");
         this->addView(titleLabel_);
 
         // Downloaded ROMs, plus remote rows when the remote toggle is on.
@@ -304,7 +309,10 @@ public:
         countLabel_->setHorizontalAlign(brls::HorizontalAlign::CENTER);
         countLabel_->setTextColor(theme.color("nxstation/detail_text"));
         countLabel_->setMarginTop(8);
-        countLabel_->setText(pending == 1 ? "1 ROM to fetch" : std::to_string(pending) + " ROMs to fetch");
+        // The count is only known after the fetch when the library is being refreshed first.
+        countLabel_->setText(fetchLibraryFirst_
+                                 ? std::to_string(romm.library().entries().size()) + " ROMs cached"
+                                 : (pending == 1 ? "1 ROM to fetch" : std::to_string(pending) + " ROMs to fetch"));
         this->addView(countLabel_);
 
         progressTrack_ = new brls::Box();
@@ -377,6 +385,74 @@ private:
         running_ = true;
         auto& romm = sf::romm::RomMService::instance();
         auto& fetcher = romm.art();
+        fetcher.clearAbort();
+
+        auto alive = alive_;
+
+        auto onProgress = [this, alive](const sf::ScrapeProgress& progress) {
+            if (!*alive)
+                return;
+
+            // Both stages report the work actually walked, so the bar measures this run rather than
+            // the whole library: index is the entry being worked on, total is what still needs it.
+            if (progress.total > 0)
+                setPercent(static_cast<int>(progress.index * 100 / progress.total));
+
+            std::string status;
+            if (progress.phase == "Library")
+                status = "Library " + std::to_string(progress.index) + " of " + std::to_string(progress.total);
+            else
+                status = "ROM " + std::to_string(progress.index) + " of " + std::to_string(progress.total)
+                         + " — " + progress.gameName;
+            if (!progress.phase.empty() && progress.phase != "Library")
+                status += " · " + progress.phase;
+            if (!progress.detail.empty())
+                status += ": " + progress.detail;
+            setStatus(status);
+        };
+
+        auto showSummary = [this](const std::string& summary, bool ok) {
+            running_ = false;
+            finished_ = true;
+            spinner_->setVisibility(brls::Visibility::GONE);
+            setStatus(summary);
+            statusLabel_->setTextColor(ThemeManager::instance().color(ok ? "success" : "error"));
+            if (onFinished_)
+                onFinished_(ok);
+        };
+
+        auto onBatchDone = [this, alive, showSummary](size_t succeeded, size_t failed, size_t skipped,
+                                                       bool aborted) {
+            if (!*alive)
+                return;
+
+            const size_t processed = succeeded + failed + skipped;
+            std::string summary = aborted ? "Aborted — " : "Fetched ";
+            summary += std::to_string(succeeded) + " of " + std::to_string(processed);
+            if (failed > 0)
+                summary += ", " + std::to_string(failed) + " failed";
+            if (skipped > 0)
+                summary += ", " + std::to_string(skipped) + " skipped";
+
+            showSummary(summary, succeeded > 0);
+        };
+
+        if (fetchLibraryFirst_) {
+            // The batch runs inside the refresh, on the same worker, and reports through the same
+            // callback. The fetcher's own flag is passed so one B press stops the paging and the
+            // batch; the fetch checks it between pages, the batch before every ROM.
+            setStatus("Fetching library…");
+            romm.refreshLibraryAsync([this, alive, showSummary, &romm](bool ok, const std::string& message) {
+                if (!*alive)
+                    return;
+                if (!ok) {
+                    showSummary(message.empty() ? "Library refresh failed" : message, false);
+                    return;
+                }
+                showSummary(message, true);
+            }, onProgress, &fetcher.abortFlag());
+            return;
+        }
 
         std::vector<sf::romm::LibraryEntry> targets;
         for (const auto& entry : romm.library().entries()) {
@@ -392,49 +468,13 @@ private:
             return;
         }
 
-        auto alive = alive_;
-        fetcher.fetchBatchAsync(
-            std::move(targets),
-            [this, alive](const sf::ScrapeProgress& progress) {
-                if (!*alive)
-                    return;
-
-                const size_t completed = progress.succeeded + progress.failed + progress.skipped;
-                if (progress.total > 0)
-                    setPercent(static_cast<int>(completed * 100 / progress.total));
-
-                std::string status = "ROM " + std::to_string(progress.index) + " of "
-                                     + std::to_string(progress.total) + " — " + progress.gameName;
-                if (!progress.phase.empty())
-                    status += " · " + progress.phase;
-                if (!progress.detail.empty())
-                    status += ": " + progress.detail;
-                setStatus(status);
-            },
-            [this, alive](size_t succeeded, size_t failed, size_t skipped, bool aborted) {
-                if (!*alive)
-                    return;
-
-                running_ = false;
-                finished_ = true;
-                spinner_->setVisibility(brls::Visibility::GONE);
-
-                const size_t processed = succeeded + failed + skipped;
-                std::string summary = aborted ? "Aborted — " : "Fetched ";
-                summary += std::to_string(succeeded) + " of " + std::to_string(processed);
-                if (failed > 0)
-                    summary += ", " + std::to_string(failed) + " failed";
-                if (skipped > 0)
-                    summary += ", " + std::to_string(skipped) + " skipped";
-
-                setStatus(summary);
-                statusLabel_->setTextColor(ThemeManager::instance().color(succeeded > 0 ? "success" : "error"));
-
-                if (onFinished_) onFinished_(succeeded > 0);
-            });
+        countLabel_->setText(targets.size() == 1 ? "1 ROM to fetch"
+                                                  : std::to_string(targets.size()) + " ROMs to fetch");
+        fetcher.fetchBatchAsync(std::move(targets), onProgress, onBatchDone);
     }
 
     std::function<void(bool)> onFinished_;
+    bool fetchLibraryFirst_ = false;
     brls::Label* titleLabel_ = nullptr;
     brls::Label* countLabel_ = nullptr;
     brls::Label* statusLabel_ = nullptr;
@@ -707,29 +747,30 @@ void buildRomMSettingsRows(brls::Box* listBox) {
     styleSettingsCell(syncNowRow);
     listBox->addView(syncNowRow);
 
-    // Library refresh (populates the RomM virtual library on the main page)
-    auto* refreshRow = makeSettingsRow("Refresh Library", "Fetch the RomM library from the server");
-    refreshRow->registerClickAction([refreshRow, &romm](brls::View*) {
-        refreshRow->setDetailText("Refreshing…");
-        romm.refreshLibraryAsync([refreshRow, &romm](bool ok, const std::string& message) {
-            if (!ok) {
-                refreshRow->setDetailText(message.empty() ? "Refresh failed" : message);
-                brls::Application::notify("RomM library refresh failed: " + message);
-                return;
-            }
+    // Last Art Fetch is declared before both Refresh Library and Fetch Art Now so each batch can
+    // update it.
+    auto* lastArtRow = makeSettingsRow("Last Art Fetch",
+                                       romm.art().lastSummary().empty() ? "Never" : romm.art().lastSummary());
+
+    // Library refresh (populates the RomM virtual library on the main page). The art batch runs
+    // inside the refresh, so this page shows both stages: Library n/m, then ROM n/m per asset.
+    auto* refreshRow = makeSettingsRow("Refresh Library", "Fetch the library, then the art still missing");
+    refreshRow->registerClickAction([refreshRow, lastArtRow, &romm, &rommConfig](brls::View*) {
+        if (!rommConfig.fetchArtFromRomM) {
+            brls::Application::notify("Art fetch is disabled — refreshing the library only");
+        }
+        auto* view = new RomMArtFetchView([refreshRow, lastArtRow, &romm](bool) {
+            lastArtRow->setDetailText(romm.art().lastSummary().empty() ? "Never" : romm.art().lastSummary());
+            refreshRow->setDetailText(std::to_string(romm.library().entries().size()) + " ROMs cached");
+            // Rebuild the rows so the files just written show up without a full rescan.
             romm.populateVirtualLibrary();
             sf::ui::SystemsTab::requestRefreshAfterSettings();
-            refreshRow->setDetailText(std::to_string(romm.library().entries().size()) + " ROMs cached");
-            brls::Application::notify("RomM library refreshed");
-        });
+        }, /*fetchLibraryFirst=*/true);
+        brls::Application::pushActivity(new RomMSyncActivity(view));
         return true;
     });
     styleSettingsCell(refreshRow);
     listBox->addView(refreshRow);
-
-    // Art batch (Last Art Fetch is declared before Fetch Art Now so the batch can update it)
-    auto* lastArtRow = makeSettingsRow("Last Art Fetch",
-                                       romm.art().lastSummary().empty() ? "Never" : romm.art().lastSummary());
 
     auto* fetchArtRow = makeSettingsRow("Fetch Art Now",
                                         "Cached covers, snapshots, videos, manuals (remote rows: images only)");

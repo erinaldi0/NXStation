@@ -358,10 +358,31 @@ ArtBatchStats RomMArtFetcher::fetchBatchBlocking(const std::vector<LibraryEntry>
     }
 
     std::atomic<bool>* flag = abort ? abort : &abortRequested_;
-    sf::ScrapeProgress progress;
-    progress.total = entries.size();
 
+    // Pre-pass: only entries that still need work are walked. Reporting every cached entry would
+    // make a rerun on a large library start again from "ROM 1 / N" and stream a Skipped line per
+    // ROM even though nothing is downloaded, so the batch would never look incremental.
+    std::vector<const LibraryEntry*> pending;
+    pending.reserve(entries.size());
     for (const auto& entry : entries) {
+        if (!entryIsFetchable(entry)) {
+            ++stats.skipped;
+            continue;
+        }
+        if (entryArtComplete(entry)) {
+            ++stats.skipped;
+            continue;
+        }
+        pending.push_back(&entry);
+    }
+
+    ScrapeLog::writef("[RomMArt] Pre-pass: %zu entries need art, %zu already complete",
+                      pending.size(), stats.skipped);
+
+    sf::ScrapeProgress progress;
+    progress.total = pending.size();
+
+    for (const auto* entry : pending) {
         if (flag->load()) {
             stats.aborted = true;
             break;
@@ -372,29 +393,10 @@ ArtBatchStats RomMArtFetcher::fetchBatchBlocking(const std::vector<LibraryEntry>
         progress.succeeded = stats.succeeded;
         progress.failed = stats.failed;
         progress.skipped = stats.skipped;
-        progress.gameName = entry.rom.name;
-
-        if (!entryIsFetchable(entry)) {
-            ++stats.skipped;
-            std::string reason;
-            if (entry.matchedSystemId.empty())
-                reason = "unmatched platform";
-            else if (!entry.downloadedLocally)
-                reason = config_.artForRemoteRoms ? "remote row, no file name"
-                                                  : "remote row (remote art fetch off)";
-            else
-                reason = "not downloaded locally";
-            report(progress, "Skipped", reason, true, false, onProgress);
-            continue;
-        }
-        if (entryArtComplete(entry)) {
-            ++stats.skipped;
-            report(progress, "Skipped", "art already present", true, false, onProgress);
-            continue;
-        }
+        progress.gameName = entry->rom.name;
 
         report(progress, "Art from RomM", "Fetching…", false, false, onProgress);
-        const ArtFetchResult result = fetchEntryArt(entry, progress, onProgress, flag);
+        const ArtFetchResult result = fetchEntryArt(*entry, progress, onProgress, flag);
         if (flag->load()) {
             stats.aborted = true;
             break;

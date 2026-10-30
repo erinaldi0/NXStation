@@ -528,7 +528,8 @@ bool RomMClient::completeSyncSession(const std::string& sessionId,
 }
 
 bool RomMClient::fetchLibrary(std::vector<RomMLibraryEntry>& out,
-                              const std::function<void(int fetched, int total)>& progress) {
+                              const std::function<void(int fetched, int total)>& progress,
+                              std::atomic<bool>* abort) {
     if (!ready_) {
         lastError_ = "Client not authenticated";
         return false;
@@ -543,6 +544,13 @@ bool RomMClient::fetchLibrary(std::vector<RomMLibraryEntry>& out,
     bool parsed = false;
 
     for (int page = 0; page < kMaxPages; ++page) {
+        // Checked between requests: the progress page's B button aborts the whole refresh, and the
+        // library fetch and the art batch share the same flag so one press stops both stages.
+        if (abort && abort->load()) {
+            lastError_ = "Fetch library aborted";
+            return false;
+        }
+
         const std::string url = buildUrl("/roms?limit=" + std::to_string(kPageLimit) +
                                          "&offset=" + std::to_string(offset));
         const sf::cloud::CurlResponse resp = curl_.get(url);

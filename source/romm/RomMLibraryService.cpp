@@ -30,11 +30,12 @@ RomMLibraryService::RomMLibraryService(RomMClient& client, const RomMConfig& con
     : client_(client), config_(config) {}
 
 bool RomMLibraryService::fetchLibrary(std::vector<LibraryEntry>& out,
-                                      std::function<void(int, int)> progress) {
+                                      std::function<void(int, int)> progress,
+                                      std::atomic<bool>* abort) {
     std::vector<RomMLibraryEntry> roms;
     if (!client_.fetchLibrary(roms, [&progress](int fetched, int total) {
             if (progress) progress(fetched, total);
-        })) {
+        }, abort)) {
         return false;
     }
 
