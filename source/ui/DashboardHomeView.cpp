@@ -98,6 +98,8 @@ void setCoverArt(brls::Image* image, const GameItem& game)
         image->setImageFromRes(sf::gameArtPlaceholderRes());
 }
 
+
+
 float imageRadius(const char* key, float cardRadius, float padding, float minRadius)
 {
     if (ThemeManager::instance().hasStyle(key))
@@ -105,22 +107,12 @@ float imageRadius(const char* key, float cardRadius, float padding, float minRad
     return std::clamp(cardRadius - padding, minRadius, cardRadius);
 }
 
-float wrappedImageHeight(brls::Image* image, float width, float fallback)
+/* Card width for the shared cover: the cover wraps its own shape, but never wider than
+ * the room the theme allows (card_image_max_aspect, then card_width as an absolute cap). */
+float cardCoverMaxWidth(float imageHeight, float pad)
 {
-    const float ow = image->getOriginalImageWidth();
-    const float oh = image->getOriginalImageHeight();
-    if (ow > 0 && oh > 0)
-        return width * oh / ow;
-    return fallback;
-}
-
-float wrappedImageWidth(brls::Image* image, float height, float fallback)
-{
-    const float ow = image->getOriginalImageWidth();
-    const float oh = image->getOriginalImageHeight();
-    if (ow > 0 && oh > 0)
-        return height * ow / oh;
-    return fallback;
+    return std::min(imageHeight * token("card_image_max_aspect", 1.4f),
+                    token("card_width", 160.f) - pad * 2);
 }
 
 NVGcolor mutedColor()
@@ -156,6 +148,53 @@ std::string releaseYear(const std::string& date)
 
 } // namespace
 
+DashboardCover::DashboardCover(float height, float maxWidth, float radius, brls::ImageAlignment align,
+                               float fallbackAspect)
+    : height_(height), maxWidth_(maxWidth), fallbackAspect_(fallbackAspect)
+{
+    setScalingType(brls::ImageScalingType::FIT);
+    setImageAlign(align);
+    setCornerRadius(radius);
+    setDimensions(maxWidth_, height_);
+}
+
+void DashboardCover::setGame(const GameItem& game)
+{
+    setCoverArt(this, game);
+    applySize();
+}
+
+void DashboardCover::applySize()
+{
+    const float ow = getOriginalImageWidth();
+    const float oh = getOriginalImageHeight();
+
+    float aspect = fallbackAspect_;
+    if (ow > 0.f && oh > 0.f) {
+        aspect = ow / oh;
+    } else if (retries_ < 5) {
+        // The texture dimensions only exist once the load has completed, so retry on the
+        // next frame (brls::sync runs on the main loop after innerSetImage).
+        retries_++;
+        brls::sync([this] { applySize(); });
+    }
+
+    float width = height_ * aspect;
+    float height = height_;
+    if (width > maxWidth_) {
+        // Shape wider than the room the theme allows: keep the cover inside it, which
+        // costs height. Raise *_image_max_aspect if the library contains landscape covers.
+        width = maxWidth_;
+        height = width / aspect;
+    }
+
+    naturalWidth_ = width;
+    naturalHeight_ = height;
+    setDimensions(width, height);
+
+    for (const auto& callback : onSized_)
+        callback(this);
+}
 void MultilineLabel::setMaxLines(int lines)
 {
     maxLines_ = std::max(0, lines);
@@ -435,13 +474,14 @@ brls::Box* DashboardHomeView::makeSectionHeader(const std::string& title,
     return row;
 }
 
-brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float imageHeight,
-                                       const std::string& detail, bool fillHeight,
-                                       float* naturalHeight)
+brls::Box* DashboardHomeView::makeCard(const GameItem& game, float imageHeight, float maxWidth,
+                                       const std::string& detail, const std::shared_ptr<CardRow>& row)
 {
     auto& theme = ThemeManager::instance();
     const float radius = token("card_radius", 12.f);
     const float pad = token("card_padding", 10.f);
+    const float titleFont = tokenChain("card_title_font", "font_body", 17.f);
+    const float detailFont = tokenChain("card_detail_font", "font_meta", 14.f);
 
     auto* cell = new DashboardCell(this, game.systemId, game.path, false);
     cell->setAxis(brls::Axis::COLUMN);
@@ -454,57 +494,51 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float width, float 
     cell->setFocusSound(brls::SOUND_NONE);
     cell->setHideHighlight(true);
     cell->setMarginRight(token("card_gap", 10.f));
-    cell->setWidth(width);
 
-    auto* image = new brls::Image();
-    const float innerWidth = width - pad * 2;
-    image->setWidth(innerWidth);
-    image->setCornerRadius(imageRadius("card_image_radius", radius, pad, 4.f));
-    image->setScalingType(brls::ImageScalingType::FIT);
-    image->setImageAlign(imageAlign("card_image_align", brls::ImageAlignment::CENTER));
-
-    setCoverArt(image, game);
-
-    // Wrap the card precisely around the cover shape when its aspect ratio is known.
-    // imageHeight is the fallback/cap for cards that should not grow.
-    float imageHeightUsed = imageHeight;
-    if (fillHeight) {
-        image->setGrow(1.f); // fills the row height Yoga gives the card
-    } else {
-        imageHeightUsed = std::min(imageHeight, wrappedImageHeight(image, innerWidth, imageHeight));
-        image->setHeight(imageHeightUsed);
-    }
-    cell->addView(image);
+    auto* cover = new DashboardCover(imageHeight, maxWidth,
+                                     imageRadius("card_image_radius", radius, pad, 4.f),
+                                     imageAlign("card_image_align", brls::ImageAlignment::CENTER));
+    cell->addView(cover);
 
     auto* title = new brls::Label();
     title->setText(game.meta.title.empty() ? game.displayName : game.meta.title);
-    title->setFontSize(tokenChain("card_title_font", "font_body", 17.f));
+    title->setFontSize(titleFont);
     title->setTextColor(theme.color("nxstation/title_text"));
     title->setSingleLine(true);
     title->setAnimated(false);
-    title->setWidth(innerWidth);
     cell->addView(title);
 
+    brls::Label* detailLabel = nullptr;
     if (!detail.empty()) {
-        auto* detailLabel = new brls::Label();
+        detailLabel = new brls::Label();
         detailLabel->setText(detail);
-        detailLabel->setFontSize(tokenChain("card_detail_font", "font_meta", 14.f));
+        detailLabel->setFontSize(detailFont);
         detailLabel->setTextColor(theme.color("nxstation/detail_text"));
         detailLabel->setSingleLine(true);
         detailLabel->setAnimated(false);
-        detailLabel->setWidth(innerWidth);
         cell->addView(detailLabel);
     }
 
-    if (naturalHeight != nullptr) {
-        const float titleFont = tokenChain("card_title_font", "font_body", 17.f);
-        const float detailFont = tokenChain("card_detail_font", "font_meta", 14.f);
-        *naturalHeight = pad * 2 + imageHeightUsed + titleFont * 1.3f +
-                         (detail.empty() ? 0.f : detailFont * 1.3f);
-    }
+    // The card wraps the cover: the width follows the loaded cover, the labels are
+    // constrained to the same width so they wrap/truncate inside the card.
+    cover->onSized([cell, title, detailLabel, pad](DashboardCover* c) {
+        const float inner = c->naturalWidth();
+        cell->setWidth(inner + pad * 2);
+        title->setWidth(inner);
+        if (detailLabel)
+            detailLabel->setWidth(inner);
+    });
+
+    const float labelsHeight = titleFont * 1.3f + (detail.empty() ? 0.f : detailFont * 1.3f);
+    row->add(cover, cell, labelsHeight);
+    cover->onSized([row](DashboardCover*) { row->apply(); });
+
+    cover->setGame(game);
 
     return cell;
 }
+
+
 
 brls::Box* DashboardHomeView::makeTile(const std::string& systemId)
 {
@@ -662,25 +696,20 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     const float fixedHeight = token("hero_fixed_height", 0.f);
 
     const float gap = token("hero_gap", 20.f);
-
-    // The text column width is fixed from the reference token, so the title, meta and
-    // description never move when another cover (with a different shape) gains focus.
-    const float maxAspect = token("hero_image_max_aspect", 1.0f);
-    const float slotWidth = fixedHeight > 0.f
-                              ? std::max(heroImageW, (fixedHeight - 44.f - pad * 2) * maxAspect)
-                              : heroImageW;
+    const float maxAspect = token("hero_image_max_aspect", 1.4f);
     const float cardHeight = fixedHeight > 0.f ? fixedHeight - 44.f : 0.f;
-    const float textWidth = std::min(token("hero_text_width", 860.f),
-                                     columnWidth - slotWidth - pad * 2 - gap);
+    const float coverHeight = cardHeight > 0.f ? cardHeight - pad * 2
+                                                 : token("hero_image_height", heroImageW * 1.4f);
 
-    // Hero tile (focusable): fixed height, variable width driven by the cover aspect
-    // ratio. The width is left to Yoga so Borealis' image measure function computes it
-    // from the *loaded* texture; computing it here would use the previous cover, since
-    // the texture load is asynchronous.
-    heroImage_ = new brls::Image();
-    heroImage_->setCornerRadius(imageRadius("hero_image_radius", radius, pad, 4.f));
-    heroImage_->setScalingType(brls::ImageScalingType::FIT);
-    heroImage_->setImageAlign(imageAlign("hero_image_align", brls::ImageAlignment::CENTER));
+    /* The reserve is constant so the title/meta/description column never moves; the tile
+     * wraps the cover inside it, and the cover is centered in the space available. */
+    const float reserveWidth = std::max(heroImageW, coverHeight * maxAspect);
+    const float textWidth = std::min(token("hero_text_width", 860.f),
+                                     columnWidth - reserveWidth - pad * 2 - gap);
+
+    heroCover_ = new DashboardCover(coverHeight, coverHeight * maxAspect,
+                                    imageRadius("hero_image_radius", radius, pad, 4.f),
+                                    imageAlign("hero_image_align", brls::ImageAlignment::CENTER));
 
     auto& games = AppState::instance().gamesFor(systemIds_.empty() ? std::string() : systemIds_.front());
 
@@ -688,7 +717,6 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     // When a platform tile or game card gains focus, onCellFocused will update the hero.
     const auto& recentGames = AppState::instance().gamesFor(kLastPlayedSystemId);
     const GameItem heroSeed = recentGames.empty() ? GameItem{} : recentGames.front();
-    setCoverArt(heroImage_, heroSeed);
 
     auto* card = new DashboardCell(this, heroSeed.systemId, heroSeed.path, heroSeed.path.empty());
     card->setAxis(brls::Axis::COLUMN);
@@ -701,26 +729,31 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     card->setFocusable(true);
     card->setFocusSound(brls::SOUND_NONE);
     card->setHideHighlight(true);
-    card->addView(heroImage_);
+    card->addView(heroCover_);
 
-    if (fixedHeight > 0.f) {
-        /* The slot is constant so the title/meta/description column never moves, and the
-         * cover is centered inside it (align-items + justify-content CENTER). Only the
-         * cover width changes, from its own aspect ratio, at the fixed height. */
-        const float cardHeight = fixedHeight - 44.f; // section - header
-        card->setDimensions(slotWidth + pad * 2, cardHeight);
-        card->setMinWidth(slotWidth + pad * 2);
-        card->setMaxWidth(slotWidth + pad * 2);
-        card->setMinHeight(cardHeight);
-        card->setMaxHeight(cardHeight);
-        card->setGrow(0.f);
-        card->setShrink(0.f);
-    } else {
-        // Auto mode: use the token width as before.
-        heroImage_->setWidth(heroImageW);
-        heroImage_->setHeight(wrappedImageHeight(heroImage_, heroImageW,
-                                                 token("hero_image_height", heroImageW * 1.4f)));
-    }
+    // The tile wraps the cover: the width follows the loaded cover, the height stays the
+    // Focus height the theme pinned (or the cover height when hero_fixed_height is 0).
+    heroCover_->onSized([card, pad, cardHeight](DashboardCover* cover) {
+        const float width = cover->naturalWidth() + pad * 2;
+        const float height = cardHeight > 0.f ? cardHeight : cover->naturalHeight() + pad * 2;
+        card->setDimensions(width, height);
+        if (cardHeight > 0.f) {
+            card->setMinHeight(height);
+            card->setMaxHeight(height);
+        }
+    });
+
+    card->setGrow(0.f);
+    card->setShrink(0.f);
+
+    auto* reserve = new brls::Box();
+    reserve->setAxis(brls::Axis::COLUMN);
+    reserve->setAlignItems(brls::AlignItems::CENTER);
+    reserve->setJustifyContent(brls::JustifyContent::CENTER);
+    reserve->setDimensions(reserveWidth, cardHeight > 0.f ? cardHeight : brls::View::AUTO);
+    reserve->setGrow(0.f);
+    reserve->setShrink(0.f);
+    reserve->addView(card);
 
     auto* middle = new brls::Box();
     middle->setAxis(brls::Axis::COLUMN);
@@ -767,7 +800,7 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     auto* row = new brls::Box();
     row->setAxis(brls::Axis::ROW);
     row->setAlignItems(brls::AlignItems::STRETCH);
-    row->addView(card);
+    row->addView(reserve);
     row->addView(middle);
 
     // Row grows to fill section (minus header) when fixed height is set.
@@ -803,27 +836,36 @@ brls::Box* DashboardHomeView::buildGamesSection(const std::string& headerTitle,
     section->setPadding(0, 0, token("section_gap", 14.f), 0);
     section->addView(makeSectionHeader(headerTitle, std::to_string(games.size())));
 
-    auto* row = new brls::Box();
-    row->setAxis(brls::Axis::ROW);
-    row->setAlignItems(brls::AlignItems::FLEX_START);
-
-    const float cardWidth = token("card_width", 160.f);
     const float cardImage = token("card_image_height", 120.f);
+    const float pad = token("card_padding", 10.f);
+
+    auto row = std::make_shared<CardRow>();
+    row->padding = pad;
+
+    auto* rowBox = new brls::Box();
+    rowBox->setAxis(brls::Axis::ROW);
+    rowBox->setAlignItems(brls::AlignItems::FLEX_START);
 
     for (size_t i = 0; i < games.size() && i < static_cast<size_t>(token("row_cards", kMaxRowCards)); ++i) {
         const GameItem& game = games[i];
         const std::string detail = game.systemId.empty()
                                        ? game.meta.genre
                                        : systemAcronym(game.systemId);
-        auto* card = makeCard(game, cardWidth, cardImage, detail);
-        if (i == 0 && !firstFocusable_)
+
+        auto* card = makeCard(game, cardImage, cardCoverMaxWidth(cardImage, pad), detail, row);
+        if (!firstFocusable_)
             firstFocusable_ = card;
-        row->addView(card);
+        rowBox->addView(card);
     }
 
-    section->addView(row);
+    // Every card in the row shares the tallest natural height; only the width follows
+    // each cover.
+    row->apply();
+
+    section->addView(rowBox);
     return section;
 }
+
 
 const GameItem* DashboardHomeView::pickRandomGame(const std::string& systemId)
 {
@@ -852,7 +894,6 @@ std::vector<GameItem> DashboardHomeView::randomGames(size_t count)
 brls::Box* DashboardHomeView::buildRandomSection()
 {
     const size_t count = static_cast<size_t>(token("random_games", 10.f));
-    const size_t visible = std::max<size_t>(1, static_cast<size_t>(token("random_per_row", 5.f)));
     const std::vector<GameItem> games = randomGames(count);
     if (games.empty())
         return nullptr;
@@ -863,144 +904,50 @@ brls::Box* DashboardHomeView::buildRandomSection()
     section->addView(makeSectionHeader("Random picks", std::to_string(games.size())));
 
     const float gap = tokenChain("random_gap", "card_gap", 10.f);
+    const float indicatorGap = tokenChain("random_indicator_gap", "tile_indicator_gap", 22.f);
     const float cardImage = token("card_image_height", 120.f);
     const float pad = token("card_padding", 10.f);
-    const float titleFont = tokenChain("card_title_font", "font_body", 17.f);
-    const float detailFont = tokenChain("card_detail_font", "font_meta", 14.f);
-    const float titleHeight = titleFont * 1.3f;
-    const float detailHeight = detailFont * 1.3f;
 
-    // If the theme pins a fixed card width, use the old uniform-width behavior.
-    if (ThemeManager::instance().hasStyle("random_card_width")) {
-        const float cardWidth = token("random_card_width", 224.f);
+    auto row = std::make_shared<CardRow>();
+    row->padding = pad;
 
-        std::vector<brls::Box*> cards;
-        float tallest = 0.f;
-        for (const auto& game : games) {
-            const std::string detail = game.systemId.empty()
-                                           ? game.meta.genre
-                                           : systemAcronym(game.systemId);
-            float natural = 0.f;
-            auto* card = makeCard(game, cardWidth, cardImage, detail, false, &natural);
-            card->setMarginRight(gap);
-            cards.push_back(card);
-            tallest = std::max(tallest, natural);
-        }
+    auto* content = new brls::Box();
+    content->setAxis(brls::Axis::ROW);
+    content->setAlignItems(brls::AlignItems::FLEX_START);
 
-        if (ThemeManager::instance().hasStyle("random_card_height"))
-            tallest = std::min(tallest, token("random_card_height", tallest));
+    auto* frame = new brls::HScrollingFrame();
+    frame->setWidthPercentage(100.f);
+    frame->setScrollingBehavior(scrollBehavior("random_scroll_behavior",
+                                               brls::ScrollingBehavior::CENTERED));
 
-        auto* content = new brls::Box();
-        content->setAxis(brls::Axis::ROW);
-        content->setAlignItems(brls::AlignItems::FLEX_START);
-
-        for (auto* card : cards) {
-            card->setHeight(tallest);
-            if (!firstFocusable_)
-                firstFocusable_ = card;
-            content->addView(card);
-        }
-
-        auto* frame = new brls::HScrollingFrame();
-        frame->setWidthPercentage(100.f);
-        frame->setHeight(tallest + tokenChain("random_indicator_gap", "tile_indicator_gap", 22.f));
-        frame->setScrollingBehavior(scrollBehavior("random_scroll_behavior",
-                                                   brls::ScrollingBehavior::CENTERED));
-        frame->setContentView(content);
-
-        section->addView(frame);
-        return section;
-    }
-
-    // Adaptive-width mode: each card gets a width that fits its cover at a common height.
-    // 1) Create a provisional card for each game to load the cover and measure its aspect ratio.
-    struct ProvisionalCard {
-        GameItem game;
-        std::string detail;
-        brls::Box* card;
-        brls::Image* image;
-        float aspectRatio; // width / height of the cover
-        float naturalHeight;
-    };
-    std::vector<ProvisionalCard> provisional;
-
-    // Use a provisional width based on random_per_row to trigger image loading.
-    const float inner = 1280.f - token("page_padding", 24.f) * 2.f;
-    const float provisionalWidth = (inner - static_cast<float>(visible) * gap) / static_cast<float>(visible);
-
+    // Same shared cover as the other sections: fixed height, width follows the cover.
     for (const auto& game : games) {
         const std::string detail = game.systemId.empty()
                                        ? game.meta.genre
                                        : systemAcronym(game.systemId);
 
-        // Create a temporary card to load the image and get its dimensions.
-        auto* tempCard = makeCard(game, provisionalWidth, cardImage, detail, false, nullptr);
-        // The image is the first child of the cell.
-        brls::Image* tempImage = nullptr;
-        for (auto* child : tempCard->getChildren()) {
-            if (dynamic_cast<brls::Image*>(child)) {
-                tempImage = static_cast<brls::Image*>(child);
-                break;
-            }
-        }
-
-        float aspectRatio = 0.75f; // fallback 3:4 portrait
-        if (tempImage) {
-            const float ow = tempImage->getOriginalImageWidth();
-            const float oh = tempImage->getOriginalImageHeight();
-            if (ow > 0 && oh > 0)
-                aspectRatio = ow / oh;
-        }
-
-        // Measure natural height with the provisional width.
-        float natural = 0.f;
-        makeCard(game, provisionalWidth, cardImage, detail, false, &natural);
-        // Clean up the temp card (it was added to no parent, so we own it).
-        delete tempCard;
-
-        provisional.push_back({game, detail, nullptr, nullptr, aspectRatio, natural});
-    }
-
-    // Determine the target total card height (tallest natural height).
-    float tallest = 0.f;
-    for (const auto& pc : provisional)
-        tallest = std::max(tallest, pc.naturalHeight);
-
-    if (ThemeManager::instance().hasStyle("random_card_height"))
-        tallest = std::min(tallest, token("random_card_height", tallest));
-
-    // The image height inside the card at this total height.
-    const float targetImageHeight = tallest - pad * 2 - titleHeight - detailHeight;
-
-    // 2) Build the final cards with per-card widths.
-    auto* content = new brls::Box();
-    content->setAxis(brls::Axis::ROW);
-    content->setAlignItems(brls::AlignItems::FLEX_START);
-
-    for (auto& pc : provisional) {
-        // Width needed for this cover to fit at targetImageHeight.
-        const float imageWidth = targetImageHeight * pc.aspectRatio;
-        const float cardWidth = imageWidth + pad * 2;
-
-        float natural = 0.f;
-        auto* card = makeCard(pc.game, cardWidth, cardImage, pc.detail, false, &natural);
-        card->setHeight(tallest);
+        auto* card = makeCard(game, cardImage, cardCoverMaxWidth(cardImage, pad), detail, row);
         card->setMarginRight(gap);
         if (!firstFocusable_)
             firstFocusable_ = card;
         content->addView(card);
     }
 
-    auto* frame = new brls::HScrollingFrame();
-    frame->setWidthPercentage(100.f);
-    frame->setHeight(tallest + tokenChain("random_indicator_gap", "tile_indicator_gap", 22.f));
-    frame->setScrollingBehavior(scrollBehavior("random_scroll_behavior",
-                                               brls::ScrollingBehavior::CENTERED));
-    frame->setContentView(content);
+    // The frame follows the row so a cover sized after the load cannot overflow it.
+    row->onTallest = [frame, indicatorGap](float tallest) {
+        float height = tallest;
+        if (ThemeManager::instance().hasStyle("random_card_height"))
+            height = std::min(height, ThemeManager::instance().styleNum("random_card_height", height));
+        frame->setHeight(height + indicatorGap);
+    };
+    row->apply();
 
+    frame->setContentView(content);
     section->addView(frame);
     return section;
 }
+
+
 
 brls::Box* DashboardHomeView::buildPlatformsSection()
 {
@@ -1110,55 +1057,7 @@ void DashboardHomeView::setMetaBadge(const std::string& text)
     metaBadgeRow_->addView(badge);
 }
 
-/* The hero cover keeps one height for every game and a width that follows its own shape.
- * Both dimensions are set explicitly rather than left to Yoga: the FIT measure function
- * prefers whichever axis is constrained, so with the width bounded by the slot it scales
- * the cover down instead of honouring the fixed height. The texture dimensions are only
- * known once the load completes, so when they are still unknown the sizing is retried on
- * the next frame (brls::sync runs on the main loop after innerSetImage). */
-void DashboardHomeView::applyHeroCoverSize()
-{
-    if (!heroImage_)
-        return;
 
-    const float fixedHeight = token("hero_fixed_height", 0.f);
-    if (fixedHeight <= 0.f)
-        return;
-
-    const float pad = token("hero_tile_padding", 4.f);
-    const float cardHeight = fixedHeight - 44.f;          // section - header
-    const float imageHeight = cardHeight - pad * 2;
-    const float maxAspect = token("hero_image_max_aspect", 1.0f);
-
-    const float ow = heroImage_->getOriginalImageWidth();
-    const float oh = heroImage_->getOriginalImageHeight();
-    if (ow <= 0.f || oh <= 0.f) {
-        brls::sync([this] { applyHeroCoverSize(); });
-        return;
-    }
-
-    const float aspect = ow / oh;
-    const float guardWidth = imageHeight * maxAspect;
-
-    float width = imageHeight * aspect;
-    float height = imageHeight;
-    if (width > guardWidth) {
-        // Cover wider than the guard: keep it inside the slot, which costs height.
-        width = guardWidth;
-        height = width / aspect;
-    }
-
-    heroImage_->setDimensions(width, height);
-
-    if (auto* card = heroImage_->getParent()) {
-        const float slotWidth = std::max(token("hero_image_width", 140.f), guardWidth);
-        card->setDimensions(slotWidth + pad * 2, cardHeight);
-        card->setMinWidth(slotWidth + pad * 2);
-        card->setMaxWidth(slotWidth + pad * 2);
-        card->setMinHeight(cardHeight);
-        card->setMaxHeight(cardHeight);
-    }
-}
 
 void DashboardHomeView::updateHero(const GameItem* game)
 {
@@ -1195,19 +1094,8 @@ void DashboardHomeView::updateHero(const GameItem* game)
                                   ? game->meta.description
                                   : "No description — scrape from the Y menu to fill in metadata.");
 
-    if (heroImage_) {
-        const float fixedHeight = token("hero_fixed_height", 0.f);
-        setCoverArt(heroImage_, game ? *game : GameItem{});
-        if (fixedHeight > 0.f) {
-            applyHeroCoverSize();
-        } else {
-            // Auto mode: use token width, height from aspect ratio.
-            const float w = token("hero_image_width", 140.f);
-            heroImage_->setWidth(w);
-            heroImage_->setHeight(wrappedImageHeight(heroImage_, w,
-                                                     token("hero_image_height", w * 1.4f)));
-        }
-    }
+    if (heroCover_)
+        heroCover_->setGame(game ? *game : GameItem{});
 
     if (!metaLabels_.empty()) {
         setMetaRow("Platform", systemName);

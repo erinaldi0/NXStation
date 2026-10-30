@@ -54,7 +54,7 @@ const std::unordered_map<std::string, std::string> kLegacyThemeNames = {
 };
 
 const std::vector<std::string> kDefaultDashboardSections = {
-    "hero", "metadata", "platforms", "random", "continue", "favourites",
+    "hero", "metadata", "continue", "platforms", "random", "favourites",
 };
 
 bool readThemeMeta(const std::string& folderName, std::string* outName, std::string* outVariant)

@@ -57,6 +57,7 @@
     <entry key="card_gap" value="10"/>
     <entry key="card_image_align" value="center"/>
     <entry key="card_image_height" value="120"/>
+    <entry key="card_image_max_aspect" value="1.4"/>
     <entry key="card_image_radius" value="8"/>
     <entry key="card_padding" value="10"/>
     <entry key="card_radius" value="12"/>
@@ -79,7 +80,7 @@
     <entry key="hero_fixed_height" value="250"/>
     <entry key="hero_gap" value="20"/>
     <entry key="hero_image_align" value="center"/>
-    <entry key="hero_image_max_aspect" value="1"/>
+    <entry key="hero_image_max_aspect" value="1.4"/>
     <entry key="hero_image_radius" value="8"/>
     <entry key="hero_image_width" value="140"/>
     <entry key="hero_meta_font" value="14"/>
@@ -103,7 +104,6 @@
     <entry key="random_games" value="10"/>
     <entry key="random_gap" value="10"/>
     <entry key="random_indicator_gap" value="22"/>
-    <entry key="random_per_row" value="5"/>
     <entry key="random_scroll_behavior" value="centered"/>
     <entry key="row_cards" value="8"/>
     <entry key="section_gap" value="14"/>
@@ -127,9 +127,9 @@
   <sections>
     <section name="hero"/>
     <section name="metadata"/>
+    <section name="continue"/>
     <section name="platforms"/>
     <section name="random"/>
-    <section name="continue"/>
     <section name="favourites"/>
   </sections>
 </theme>

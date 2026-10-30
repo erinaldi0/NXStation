@@ -3,6 +3,9 @@
 #include "app/Models.hpp"
 
 #include <borealis.hpp>
+#include <algorithm>
+#include <functional>
+#include <memory>
 #include <random>
 #include <string>
 #include <unordered_map>
@@ -38,6 +41,75 @@ private:
     std::string romPath_;
     bool isSystemCell_;
     NVGcolor idleBorderColor_{0, 0, 0, 0};
+};
+
+/** Cover used by every dashboard section (Focus, Continue playing, Favourites, Random
+ *  picks), so they all size covers the same way: the height is the fixed axis and the
+ *  width follows the cover's own shape. The texture dimensions are only known once the
+ *  load completes, so the size is applied again on the next frame when the cover is not
+ *  loaded yet, and the wrapping card is notified through onSized(). */
+class DashboardCover : public brls::Image {
+public:
+    DashboardCover(float height, float maxWidth, float radius, brls::ImageAlignment align, float fallbackAspect = 0.75f);
+
+    /** Loads the game art (or the theme placeholder) and sizes the cover from it. */
+    void setGame(const GameItem& game);
+
+    /** Notified after every sizing, including the one that follows an asynchronous load. */
+    void onSized(std::function<void(DashboardCover*)> callback) { onSized_.push_back(std::move(callback)); }
+
+    float naturalWidth() const { return naturalWidth_; }
+    float naturalHeight() const { return naturalHeight_; }
+
+private:
+    void applySize();
+
+    float height_;
+    float maxWidth_;
+    float fallbackAspect_;
+    float naturalWidth_ = 0.f;
+    float naturalHeight_ = 0.f;
+    int retries_ = 0;
+    std::vector<std::function<void(DashboardCover*)>> onSized_;
+};
+
+/** Row of cards that share one height: every card wraps its own cover, so only the width
+ *  changes between games. The height is the tallest natural card in the row, recomputed
+ *  when a cover is sized after an asynchronous texture load. */
+struct CardRow {
+    struct Entry {
+        DashboardCover* cover;
+        brls::Box* cell;
+        float labelsHeight;
+    };
+
+    float padding = 0.f;
+    std::vector<Entry> entries;
+
+    void add(DashboardCover* cover, brls::Box* cell, float labelsHeight)
+    {
+        entries.push_back({cover, cell, labelsHeight});
+    }
+
+    float tallest() const
+    {
+        float tallest = 0.f;
+        for (const auto& entry : entries)
+            tallest = std::max(tallest, padding * 2 + entry.cover->naturalHeight() + entry.labelsHeight);
+        return tallest;
+    }
+
+    /** Optional hook, for instance to keep a scrolling frame tall enough for the row. */
+    std::function<void(float)> onTallest;
+
+    void apply()
+    {
+        const float height = tallest();
+        for (const auto& entry : entries)
+            entry.cell->setHeight(height);
+        if (onTallest)
+            onTallest(height);
+    }
 };
 
 /** Label that truly wraps. Borealis only measures and wraps a label when its width is
@@ -77,9 +149,8 @@ private:
     void registerActions();
 
     brls::Box* makeSectionHeader(const std::string& title, const std::string& count);
-    brls::Box* makeCard(const GameItem& game, float width, float imageHeight,
-                        const std::string& detail, bool fillHeight = false,
-                        float* naturalHeight = nullptr);
+    brls::Box* makeCard(const GameItem& game, float imageHeight, float maxWidth,
+                        const std::string& detail, const std::shared_ptr<CardRow>& row);
     brls::Box* makeTile(const std::string& systemId);
     brls::Box* makeBadge(const std::string& text);
 
@@ -94,7 +165,6 @@ private:
     const GameItem* pickRandomGame(const std::string& systemId);
 
     void updateHero(const GameItem* game);
-    void applyHeroCoverSize();
     void setMetaBadge(const std::string& text);
     void setMetaRow(const std::string& key, const std::string& value);
 
@@ -105,7 +175,7 @@ private:
     brls::Box* firstFocusable_ = nullptr;
     std::unordered_map<std::string, brls::Box*> focusTargets_;
 
-    brls::Image* heroImage_ = nullptr;
+    DashboardCover* heroCover_ = nullptr;
     brls::Label* heroTitle_ = nullptr;
     brls::Label* heroMeta_ = nullptr;
     brls::Label* heroDescription_ = nullptr;
