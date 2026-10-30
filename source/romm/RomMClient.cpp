@@ -230,6 +230,14 @@ std::string RomMClient::buildUrl(const std::string& path) const {
     return baseUrl_ + "/api" + path;
 }
 
+std::unique_ptr<RomMClient> RomMClient::fork() const {
+    // RomMClient is not copyable (CurlHelper holds a mutex), so a fork is a new client that is
+    // configured from this one's server + tokens rather than a copy.
+    auto copy = std::make_unique<RomMClient>();
+    copy->configure(baseUrl_, accessToken_, clientToken_);
+    return copy;
+}
+
 std::string RomMClient::assetUrl(const std::string& path) const {
     if (path.empty())
         return {};

@@ -43,6 +43,12 @@ struct RomMConfig {
      * manuals stay with downloaded ROMs.
      */
     bool artForRemoteRoms = true;
+    /**
+     * Worker threads the background art queue fans out over (1-4). CurlHelper is mutex-guarded per
+     * instance, so each worker needs its own client; the queue keeps one fork per worker rather than
+     * sharing handles.
+     */
+    int artWorkers = 3;
 
     // Runtime-only (not persisted to config file)
     std::string accessToken;        // Bearer token for API calls

@@ -3,6 +3,7 @@
 #include "cloud/CurlHelper.hpp"
 #include "romm/RomMConfig.hpp"
 
+#include <memory>
 #include <string>
 #include <vector>
 #include <optional>
@@ -163,6 +164,13 @@ public:
     bool downloadToUrl(const std::string& url, const std::string& localPath,
                        const sf::cloud::ProgressFn& progress = {}, bool allowResume = false);
     std::string buildUrlPublic(const std::string& path) const { return buildUrl(path); }
+
+    /**
+     * A second client on its own curl handle, for a worker thread. CurlHelper is mutex-guarded per
+     * instance, so a fan-out over several workers would serialize on one handle; each worker takes a
+     * fork. Same server and tokens, independent transfers.
+     */
+    std::unique_ptr<RomMClient> fork() const;
 
     /**
      * URL for one of RomM's cached provider images. Resource paths returned by the API

@@ -2,6 +2,7 @@
 
 #include "app/AppState.hpp"
 #include "app/Config.hpp"
+#include "romm/RomMService.hpp"
 #include "ui/GameListView.hpp"
 #include "ui/GameSearch.hpp"
 #include "ui/LibraryScanView.hpp"
@@ -319,6 +320,13 @@ DashboardHomeView::DashboardHomeView()
 
     registerActions();
     rebuild();
+}
+
+DashboardHomeView::~DashboardHomeView()
+{
+    *artAlive_ = false;
+    if (artListenerId_ >= 0)
+        sf::romm::RomMService::instance().art().removeListener(artListenerId_);
 }
 
 brls::View* DashboardHomeView::create()
@@ -688,6 +696,40 @@ void DashboardHomeView::buildTopBar()
     auto* grow = new brls::Box();
     grow->setGrow(1.f);
     row->addView(grow);
+
+    // Background art job. Shown only while a job is running, so the bar stays quiet otherwise; the
+    // dashboard rebuilds, so the listener is replaced here rather than accumulating, and the
+    // destructor drops it when the view is destroyed.
+    artIndicator_ = new brls::Label();
+    artIndicator_->setFontSize(tokenChain("count_font", "font_body", 17.f));
+    artIndicator_->setTextColor(theme.color("nxstation/count_text"));
+    artIndicator_->setSingleLine(true);
+    artIndicator_->setAnimated(false);
+    row->addView(artIndicator_);
+
+    auto& queue = sf::romm::RomMService::instance().art();
+    if (artListenerId_ >= 0)
+        queue.removeListener(artListenerId_);
+
+    auto alive = artAlive_;
+    auto* indicator = artIndicator_;
+    artListenerId_ = queue.addListener([this, alive, indicator](const sf::romm::ArtJobStatus& status) {
+        if (!*alive || !indicator)
+            return;
+
+        if (!status.running) {
+            indicator->setVisibility(brls::Visibility::GONE);
+            return;
+        }
+        indicator->setVisibility(brls::Visibility::VISIBLE);
+        indicator->setText("Art " + std::to_string(status.processed) + "/" + std::to_string(status.total));
+    });
+
+    if (queue.isRunning())
+        artIndicator_->setText("Art " + std::to_string(queue.status().processed) + "/" +
+                               std::to_string(queue.status().total));
+    else
+        artIndicator_->setVisibility(brls::Visibility::GONE);
 
     size_t total = 0;
     for (const auto& sys : Config::instance().systems())

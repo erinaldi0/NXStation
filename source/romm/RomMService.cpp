@@ -74,7 +74,7 @@ void RomMService::applyConfig(const RomMConfig& config) {
     store_ = std::make_unique<RomMStateStore>(config_);
     syncEngine_ = std::make_unique<RomMSyncEngine>(client_, *mapper_, *store_, config_);
     library_ = std::make_unique<RomMLibraryService>(client_, config_);
-    art_ = std::make_unique<RomMArtFetcher>(client_, config_);
+    art_ = std::make_unique<RomMArtQueue>(client_, config_, *library_);
 }
 
 void RomMService::refreshConfig() {
@@ -92,6 +92,8 @@ void RomMService::refreshConfig() {
     config_.romMappingFile = latestConfig.romMappingFile;
     config_.fetchArtFromRomM = latestConfig.fetchArtFromRomM;
     config_.artFallbackScraper = latestConfig.artFallbackScraper;
+    config_.artForRemoteRoms = latestConfig.artForRemoteRoms;
+    config_.artWorkers = latestConfig.artWorkers;
     
     // Update enabled state
     enabled_ = config_.enabled && !config_.serverUrl.empty();
@@ -341,60 +343,38 @@ void RomMService::populateVirtualLibrary() {
     SF_LOG_I("RomM", "Virtual library: %zu entries (%zu downloaded)", total, downloaded);
 }
 
-void RomMService::fetchArtForEntry(const LibraryEntry& entry, std::atomic<bool>* abort) {
+void RomMService::fetchArtForEntry(const LibraryEntry& entry) {
     if (!enabled_ || !config_.fetchArtFromRomM || !client_.isReady() || !art_)
         return;
 
-    sf::ScrapeProgress progress;
-    progress.total = 1;
-    progress.index = 1;
-    art_->fetchEntryArt(entry, progress, nullptr, abort);
+    // Queue rather than fetch inline: the background workers pick it up, so a download that just
+    // finished does not hold a pool slot for the asset transfers.
+    art_->enqueueEntry(entry);
+    art_->start();
 }
 
-void RomMService::refreshLibraryAsync(std::function<void(bool, const std::string&)> done,
-                                      ArtProgressCb onProgress, std::atomic<bool>* abort) {
+void RomMService::refreshLibraryAsync(std::function<void(bool, const std::string&)> done) {
     refreshConfig();
     if (!enabled_ || !client_.isReady()) {
         if (done) done(false, "RomM not configured or authenticated");
         return;
     }
 
-    AppState::instance().pool().enqueue([this, done = std::move(done), onProgress = std::move(onProgress),
-                                         abort]() mutable {
-        // Both stages report through the same callback, marshalled to the main thread, so one
-        // progress page covers the paginated fetch and the art batch.
-        auto report = [&onProgress](const sf::ScrapeProgress& progress) {
-            sf::ScrapeProgress copy = progress;
-            brls::sync([onProgress, copy]() {
-                if (onProgress)
-                    onProgress(copy);
-            });
-        };
-
+    AppState::instance().pool().enqueue([this, done = std::move(done)]() mutable {
         std::vector<LibraryEntry> out;
-        sf::ScrapeProgress progress;
-        bool ok = library_->fetchLibrary(out, [&](int fetched, int total) {
-            progress.index = static_cast<size_t>(fetched);
-            progress.total = static_cast<size_t>(total);
-            progress.phase = "Library";
-            progress.detail = "Fetched";
-            progress.hasResult = true;
-            progress.success = true;
-            report(progress);
-        }, abort);
+        bool ok = library_->fetchLibrary(out);
         std::string message = ok ? "Library refreshed" : client_.lastError();
 
-        // The server already has the provider images cached, so art for anything still missing is
-        // one GET per asset here instead of a hash + API query + rate-limited download per ROM. The
-        // batch only walks entries that still need work, so a rerun picks up where it stopped.
-        if (ok && config_.fetchArtFromRomM && art_ && !(abort && abort->load())) {
-            const ArtBatchStats stats = art_->fetchBatchBlocking(out, [&report](const sf::ScrapeProgress& p) {
-                report(p);
-            }, abort);
-            if (stats.succeeded + stats.failed + stats.skipped > 0) {
-                message += " — art " + std::to_string(stats.succeeded) + " fetched, "
-                           + std::to_string(stats.failed) + " failed, "
-                           + std::to_string(stats.skipped) + " skipped";
+        // The server already has the provider images cached, so art for anything still missing is one
+        // GET per asset. The queue carries only the entries that still need work, and the workers run
+        // the transfers, so the refresh returns without waiting on them.
+        if (ok && config_.fetchArtFromRomM && art_) {
+            const size_t queued = art_->enqueue(out);
+            if (queued > 0) {
+                message += " — " + std::to_string(queued) + " entries queued for art";
+                art_->start();
+            } else {
+                message += " — art already complete for every fetchable ROM";
             }
         }
 
@@ -455,10 +435,10 @@ void RomMService::downloadRomAsync(const LibraryEntry& entry,
             mapper_->addOrUpdateMapping(entry.rom.id, entry.matchedSystemId, localPath,
                                         entry.rom.name, sys ? sys->core : "");
 
-            // Art for the ROM that just landed: fetch it here so the row has a cover without
-            // waiting for a batch run. The cached entry carries the resolved local path.
+            // Art for the ROM that just landed: queue it so the row gets a cover without holding this
+            // pool slot through the asset transfers.
             if (saved)
-                fetchArtForEntry(*saved, abort);
+                fetchArtForEntry(*saved);
 
             message = "Downloaded to " + localPath;
         } else {

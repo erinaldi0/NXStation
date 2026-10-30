@@ -619,6 +619,11 @@ bool Config::loadRomMConfig()
         rc.fetchArtFromRomM = j.value("fetch_art_from_romm", true);
         rc.artFallbackScraper = j.value("art_fallback_scraper", true);
         rc.artForRemoteRoms = j.value("art_for_remote_roms", true);
+        rc.artWorkers = j.value("art_workers", 3);
+        if (rc.artWorkers < 1)
+            rc.artWorkers = 1;
+        if (rc.artWorkers > 4)
+            rc.artWorkers = 4;
         rc.romMappingFile = j.value("rom_mapping_file", std::string("romm_mappings.json"));
         // Older settings stored the mapping file under the library-cache name, which made the
         // two services overwrite each other; force the split for existing installs.

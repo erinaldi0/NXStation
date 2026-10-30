@@ -263,6 +263,11 @@ int main(int argc, char* argv[])
     romm.loadLibraryCache();
     romm.populateVirtualLibrary();
     if (romm.isEnabled()) {
+        // Job interrupted by a launch (NXStation exits at the core handoff) resumes from the ids it
+        // persisted, then the refresh queues whatever is still missing.
+        if (romm.art().loadPending())
+            romm.art().start();
+
         romm.refreshLibraryAsync([](bool ok, const std::string&) {
             if (!ok)
                 return;

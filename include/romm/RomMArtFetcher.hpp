@@ -24,16 +24,7 @@ struct ArtFetchResult {
     bool anyFetched() const { return fromRomM + fromScraper > 0; }
 };
 
-/** Counters for a whole batch. */
-struct ArtBatchStats {
-    size_t succeeded = 0;
-    size_t failed = 0;
-    size_t skipped = 0;
-    bool aborted = false;
-};
-
 using ArtProgressCb = std::function<void(const sf::ScrapeProgress&)>;
-using ArtBatchDoneCb = std::function<void(size_t succeeded, size_t failed, size_t skipped, bool aborted)>;
 
 /**
  * Downloads the cover / thumbnail / video / manual assets RomM has already fetched from a
@@ -46,8 +37,8 @@ using ArtBatchDoneCb = std::function<void(size_t succeeded, size_t failed, size_
  * Only JPEG and PNG sources are used — borealis decodes images with stb_image, which has no
  * WebP support, so a WebP-only entry falls back to its ScreenScraper URL (server-resized JPEG).
  *
- * The batch is deliberately serial: CurlHelper is mutex-guarded per instance, so fanning out
- * over several pool workers would only serialize the same transfers.
+ * This is the per-entry worker; the queued, multi-threaded form lives in RomMArtQueue, which gives
+ * each worker its own client (CurlHelper serializes on one mutex per instance).
  */
 class RomMArtFetcher {
 public:
@@ -59,25 +50,6 @@ public:
      */
     ArtFetchResult fetchEntryArt(const LibraryEntry& entry, sf::ScrapeProgress& progress,
                                  const ArtProgressCb& onProgress, std::atomic<bool>* abort = nullptr);
-
-    /** Fetch a batch on the calling thread. Entries that need nothing count as skipped. */
-    ArtBatchStats fetchBatchBlocking(const std::vector<LibraryEntry>& entries,
-                                     const ArtProgressCb& onProgress,
-                                     std::atomic<bool>* abort = nullptr);
-
-    /** Fetch a batch on a pool worker; both callbacks are marshalled to the main thread. */
-    void fetchBatchAsync(std::vector<LibraryEntry> entries, ArtProgressCb onProgress,
-                         ArtBatchDoneCb onDone);
-
-    void requestAbort() { abortRequested_.store(true); }
-    void clearAbort() { abortRequested_.store(false); }
-    bool isAbortRequested() const { return abortRequested_.load(); }
-
-    /**
-     * The abort flag itself, so a batch and the library fetch that feeds it can share one flag and
-     * stop from a single B press.
-     */
-    std::atomic<bool>& abortFlag() { return abortRequested_; }
 
     /**
      * Entries the fetcher can write to: a matched system plus either a downloaded ROM or, when
@@ -95,14 +67,9 @@ public:
     /** True when every asset the config asks for is already on disk for this entry. */
     bool entryArtComplete(const LibraryEntry& entry) const;
 
-    /** Summary of the most recent batch, shown by the settings row. */
-    std::string lastSummary() const { return lastSummary_; }
-
 private:
     RomMClient& client_;
     const RomMConfig& config_;
-    std::atomic<bool> abortRequested_{false};
-    std::string lastSummary_;
 
     /** Download to `.part` then rename, so a dropped transfer never leaves half an image. */
     bool downloadTo(const std::string& url, const std::string& dest, std::atomic<bool>* abort);

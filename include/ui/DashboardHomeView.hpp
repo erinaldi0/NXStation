@@ -142,6 +142,7 @@ public:
     static brls::View* create();
 
     DashboardHomeView();
+    ~DashboardHomeView() override;
 
     void willAppear(bool resetState = false) override;
     void frame(brls::FrameContext* ctx) override;
@@ -187,7 +188,12 @@ private:
     brls::Box* metaBadgeRow_ = nullptr;  // badges moved to Details section
     std::unordered_map<std::string, brls::Label*> metaLabels_;
     GameItem heroGame_;
-    std::mt19937 rng_;
+
+    /** Background art job: the top bar shows it only while a job is running. The view can be rebuilt,
+     *  so the listener id is replaced and dropped in the destructor. */
+    brls::Label* artIndicator_ = nullptr;
+    int artListenerId_ = -1;
+    std::shared_ptr<bool> artAlive_ = std::make_shared<bool>(true);    std::mt19937 rng_;
 };
 
 } // namespace sf::ui

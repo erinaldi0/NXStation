@@ -6,7 +6,7 @@
 #include "romm/RomMSaveMapper.hpp"
 #include "romm/RomMStateStore.hpp"
 #include "romm/RomMLibraryService.hpp"
-#include "romm/RomMArtFetcher.hpp"
+#include "romm/RomMArtQueue.hpp"
 
 #include <string>
 #include <functional>
@@ -68,14 +68,11 @@ public:
     void populateVirtualLibrary();
 
     /**
-     * Fetch the library on a worker thread, persist the cache, then fetch art for the entries
-     * still missing it. `onProgress` reports both stages — `phase == "Library"` for the paginated
-     * fetch, then one row per ROM for the batch — so a progress view can show it live. `abort`
-     * should be the fetcher's flag, so one B press stops the fetch and the batch together.
+     * Fetch the library on a worker thread, persist the cache, then queue the entries still missing
+     * art for the background job. Nothing here waits on the batch — the job's status row (and the home
+     * indicator) is where its progress shows.
      */
-    void refreshLibraryAsync(std::function<void(bool, const std::string&)> done,
-                             ArtProgressCb onProgress = nullptr,
-                             std::atomic<bool>* abort = nullptr);
+    void refreshLibraryAsync(std::function<void(bool, const std::string&)> done);
 
     /** Download one library entry on a worker thread; registers the mapping + saves the cache. */
     void downloadRomAsync(const LibraryEntry& entry,
@@ -105,14 +102,14 @@ public:
     /** Get the library service for ROM browsing/downloading. */
     RomMLibraryService& library() { return *library_; }
 
-    /** Cached provider images on the server: covers, screenshots, video, manuals. */
-    RomMArtFetcher& art() { return *art_; }
+    /** Background art job: queued entries drained by a few worker threads. */
+    RomMArtQueue& art() { return *art_; }
 
     /**
-     * Fetch one entry's assets on the calling (worker) thread, immediately after its ROM lands,
-     * so the row has art without waiting for a full batch.
+     * Queue one entry's assets — called right after its ROM lands so the row gets art without waiting
+     * for a whole batch. The workers drain the queue; this does not block.
      */
-    void fetchArtForEntry(const LibraryEntry& entry, std::atomic<bool>* abort = nullptr);
+    void fetchArtForEntry(const LibraryEntry& entry);
 
     /** Refresh internal config from Config singleton (call after settings change). */
     void refreshConfig();
@@ -127,7 +124,7 @@ private:
     std::unique_ptr<RomMStateStore> store_;
     std::unique_ptr<RomMSyncEngine> syncEngine_;
     std::unique_ptr<RomMLibraryService> library_;
-    std::unique_ptr<RomMArtFetcher> art_;
+    std::unique_ptr<RomMArtQueue> art_;
 
     std::atomic<bool> syncInProgress_{false};
     bool enabled_ = false;
