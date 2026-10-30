@@ -22,7 +22,8 @@
     <entry key="hero_size" value="180"/>
     <entry key="card_width" value="160"/>
     <entry key="card_image_height" value="120"/>
-    <entry key="card_image_max_aspect" value="1.4"/>
+    <entry key="card_image_aspect" value="0.75"/>
+    <entry key="card_image_fit" value="fit"/>
     <entry key="section_gap" value="14"/>
     <entry key="focus_glow" value="#50FA7B80"/>
     <entry key="focus_glow_width" value="2"/>
@@ -57,7 +58,8 @@
     <entry key="meta_width_pct" value="33.3"/>
     <entry key="column_gap" value="16"/>
     <entry key="hero_image_width" value="140"/>
-    <entry key="hero_image_max_aspect" value="1.4"/>
+    <entry key="hero_image_aspect" value="0.75"/>
+    <entry key="hero_image_fit" value="fit"/>
     <entry key="hero_tile_padding" value="4"/>
     <entry key="hero_tile_radius" value="12"/>
     <entry key="hero_image_radius" value="8"/>

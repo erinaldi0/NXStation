@@ -520,7 +520,8 @@
     &lt;entry key="hero_size" value="180"/&gt;
     &lt;entry key="card_width" value="160"/&gt;          &lt;!-- absolute cap; the card wraps the cover --&gt;
     &lt;entry key="card_image_height" value="120"/&gt;
-    &lt;entry key="card_image_max_aspect" value="1.4"/&gt; &lt;!-- widest cover shape kept at the fixed height --&gt;
+    &lt;entry key="card_image_aspect" value="0.75"/&gt;   &lt;!-- 3:4 baseline shape of the cover box --&gt;
+    &lt;entry key="card_image_fit" value="fit"/&gt;         &lt;!-- object-fit: fit, cover, fill, none --&gt;
     &lt;entry key="section_gap" value="14"/&gt;
     &lt;entry key="focus_glow" value="#4F8DFF80"/&gt;   &lt;!-- hex with alpha works --&gt;
     &lt;entry key="focus_glow_width" value="2"/&gt;
@@ -553,7 +554,8 @@
     &lt;entry key="meta_width_pct" value="33.3"/&gt;       &lt;!-- Details column, 1/3 --&gt;
     &lt;entry key="column_gap" value="16"/&gt;
     &lt;entry key="hero_image_width" value="140"/&gt;      &lt;!-- slot reserved for the cover --&gt;
-    &lt;entry key="hero_image_max_aspect" value="1.4"/&gt;   &lt;!-- widest cover shape that keeps the fixed height --&gt;
+    &lt;entry key="hero_image_aspect" value="0.75"/&gt;       &lt;!-- 3:4 baseline shape of the Focus cover box --&gt;
+    &lt;entry key="hero_image_fit" value="fit"/&gt;            &lt;!-- object-fit: fit, cover, fill, none --&gt;
     &lt;entry key="hero_tile_padding" value="4"/&gt;      &lt;!-- tight ring around the cover --&gt;
     &lt;entry key="hero_tile_radius" value="12"/&gt;
     &lt;entry key="hero_image_radius" value="8"/&gt;       &lt;!-- rounded cover corners --&gt;
@@ -605,13 +607,16 @@
               column (<code>meta_width_pct</code>, 1/3), then Continue playing, a horizontally
               scrollable Platforms row of rounded-square tiles (icon centered, only the platforms
               that contain at least one game are listed), Random picks and Favourites; a section
-              can be hidden by removing it. Every section uses the same cover object: one fixed
-              height per theme (`card_image_height`, or `hero_fixed_height` for Focus) and a width
-              that follows the cover's own shape up to `card_image_max_aspect`, so the card wraps
-              the cover instead of the cover being fitted into a fixed card. Covers are drawn with
-              rounded corners (`hero_image_radius`, `card_image_radius`, `tile_icon_radius`;
-              default = the parent radius minus its padding). Cards inside one row share the
-              tallest natural height.
+              can be hidden by removing it. Every section uses the same cover object: the box is
+              the baseline shape (3:4, `card_image_aspect` / `hero_image_aspect`) at the height the
+              theme pins (`card_image_height`, or `hero_fixed_height` for Focus), and the loaded
+              image is fitted inside that box with an object-fit rule — `card_image_fit` /
+              `hero_image_fit`: `fit` (contain, the default), `cover` (fill the box and crop),
+              `fill` (distort), `none` (draw at its own size, centered). The card wraps the box, so
+              the ring around it is tight and the labels are constrained to the same width. Covers
+              are drawn with rounded corners (`hero_image_radius`, `card_image_radius`,
+              `tile_icon_radius`; default = the parent radius minus its padding). Cards inside one
+              row share the tallest natural height.
               The <code>&lt;sections&gt;</code> block controls order and visibility: delete a
               section to hide it, reorder it to move it. Numeric <code>brls/…</code> style entries
               also override Borealis metrics (e.g. <code>brls/sidebar/item_height</code>). The

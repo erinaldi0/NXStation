@@ -44,13 +44,17 @@ private:
 };
 
 /** Cover used by every dashboard section (Focus, Continue playing, Favourites, Random
- *  picks), so they all size covers the same way: the height is the fixed axis and the
- *  width follows the cover's own shape. The texture dimensions are only known once the
- *  load completes, so the size is applied again on the next frame when the cover is not
- *  loaded yet, and the wrapping card is notified through onSized(). */
+ *  picks), so they all behave the same way: the node is the baseline box (3:4 by default,
+ *  height pinned by the theme) and the loaded image is fitted inside it with an object-fit
+ *  rule (fit = contain, cover, fill, none). The box is what the wrapping card wraps, and
+ *  the texture is only known once the asynchronous load completes, so the bounds are
+ *  recomputed on the next frame and the card is notified through onSized(). */
 class DashboardCover : public brls::Image {
 public:
-    DashboardCover(float height, float maxWidth, float radius, brls::ImageAlignment align, float fallbackAspect = 0.75f);
+    /* maxWidth is an optional cap for the box (card_width); 0 leaves the box at the
+     * baseline shape. */
+    DashboardCover(float height, float aspect, float radius, brls::ImageAlignment align,
+                   brls::ImageScalingType fit, float maxWidth = 0.f);
 
     /** Loads the game art (or the theme placeholder) and sizes the cover from it. */
     void setGame(const GameItem& game);
@@ -65,8 +69,9 @@ private:
     void applySize();
 
     float height_;
+    float aspect_;
+    brls::ImageScalingType fit_;
     float maxWidth_;
-    float fallbackAspect_;
     float naturalWidth_ = 0.f;
     float naturalHeight_ = 0.f;
     int retries_ = 0;

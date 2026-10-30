@@ -56,8 +56,9 @@
     <entry key="card_detail_font" value="14"/>
     <entry key="card_gap" value="10"/>
     <entry key="card_image_align" value="center"/>
+    <entry key="card_image_aspect" value="0.75"/>
+    <entry key="card_image_fit" value="fit"/>
     <entry key="card_image_height" value="120"/>
-    <entry key="card_image_max_aspect" value="1.4"/>
     <entry key="card_image_radius" value="8"/>
     <entry key="card_padding" value="10"/>
     <entry key="card_radius" value="12"/>
@@ -80,7 +81,8 @@
     <entry key="hero_fixed_height" value="250"/>
     <entry key="hero_gap" value="20"/>
     <entry key="hero_image_align" value="center"/>
-    <entry key="hero_image_max_aspect" value="1.4"/>
+    <entry key="hero_image_aspect" value="0.75"/>
+    <entry key="hero_image_fit" value="fit"/>
     <entry key="hero_image_radius" value="8"/>
     <entry key="hero_image_width" value="140"/>
     <entry key="hero_meta_font" value="14"/>

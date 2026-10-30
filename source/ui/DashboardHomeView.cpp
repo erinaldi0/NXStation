@@ -107,11 +107,11 @@ float imageRadius(const char* key, float cardRadius, float padding, float minRad
     return std::clamp(cardRadius - padding, minRadius, cardRadius);
 }
 
-/* Card width for the shared cover: the cover wraps its own shape, but never wider than
- * the room the theme allows (card_image_max_aspect, then card_width as an absolute cap). */
+/* Absolute cap for the card box (card_width): the box itself is the baseline shape
+ * (card_image_aspect, 3:4 by default), so this only trims unusually wide boxes. */
 float cardCoverMaxWidth(float imageHeight, float pad)
 {
-    return std::min(imageHeight * token("card_image_max_aspect", 1.4f),
+    return std::min(imageHeight * token("card_image_aspect", 0.75f),
                     token("card_width", 160.f) - pad * 2);
 }
 
@@ -148,14 +148,29 @@ std::string releaseYear(const std::string& date)
 
 } // namespace
 
-DashboardCover::DashboardCover(float height, float maxWidth, float radius, brls::ImageAlignment align,
-                               float fallbackAspect)
-    : height_(height), maxWidth_(maxWidth), fallbackAspect_(fallbackAspect)
+/* Object-fit, as CSS names it: fit = contain (the image stays inside the box), cover =
+ * fill the box and crop what does not fit, fill/stretch = distort to the box, none = draw
+ * the image at its own size, centered. Borealis expresses the same through the scaling
+ * type, so the theme can pick the rule with `hero_image_fit` / `card_image_fit`. */
+brls::ImageScalingType imageFit(const char* key, brls::ImageScalingType fallback)
 {
-    setScalingType(brls::ImageScalingType::FIT);
+    const std::string value = ThemeManager::instance().style(key, "");
+    if (value == "cover")
+        return brls::ImageScalingType::FILL;
+    if (value == "fill" || value == "stretch")
+        return brls::ImageScalingType::STRETCH;
+    if (value == "none" || value == "center")
+        return brls::ImageScalingType::CENTER;
+    return fallback;
+}
+
+DashboardCover::DashboardCover(float height, float aspect, float radius, brls::ImageAlignment align,
+                               brls::ImageScalingType fit, float maxWidth)
+    : height_(height), aspect_(aspect), fit_(fit), maxWidth_(maxWidth)
+{
+    setScalingType(fit_);
     setImageAlign(align);
     setCornerRadius(radius);
-    setDimensions(maxWidth_, height_);
 }
 
 void DashboardCover::setGame(const GameItem& game)
@@ -166,31 +181,31 @@ void DashboardCover::setGame(const GameItem& game)
 
 void DashboardCover::applySize()
 {
-    const float ow = getOriginalImageWidth();
-    const float oh = getOriginalImageHeight();
-
-    float aspect = fallbackAspect_;
-    if (ow > 0.f && oh > 0.f) {
-        aspect = ow / oh;
-    } else if (retries_ < 5) {
-        // The texture dimensions only exist once the load has completed, so retry on the
-        // next frame (brls::sync runs on the main loop after innerSetImage).
+    if (getTexture() == 0 && retries_ < 5) {
+        // The object-fit bounds depend on the loaded texture, which arrives asynchronously;
+        // brls::sync runs on the main loop after innerSetImage, so retry on the next frame.
         retries_++;
         brls::sync([this] { applySize(); });
     }
 
-    float width = height_ * aspect;
-    float height = height_;
-    if (width > maxWidth_) {
-        // Shape wider than the room the theme allows: keep the cover inside it, which
-        // costs height. Raise *_image_max_aspect if the library contains landscape covers.
-        width = maxWidth_;
-        height = width / aspect;
-    }
+    float width = height_ * aspect_;
+    const float height = height_;
+    if (maxWidth_ > 0.f)
+        width = std::min(width, maxWidth_);
 
     naturalWidth_ = width;
     naturalHeight_ = height;
+
+    /* The box is pinned with min/max as well: the FIT measure function would otherwise
+     * resize the node to the shape of the loaded image instead of keeping the baseline,
+     * and then the image could not be fitted inside the box. */
     setDimensions(width, height);
+    setMinWidth(width);
+    setMaxWidth(width);
+    setMinHeight(height);
+    setMaxHeight(height);
+
+    invalidateImageBounds();
 
     for (const auto& callback : onSized_)
         callback(this);
@@ -495,9 +510,11 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float imageHeight, 
     cell->setHideHighlight(true);
     cell->setMarginRight(token("card_gap", 10.f));
 
-    auto* cover = new DashboardCover(imageHeight, maxWidth,
+    auto* cover = new DashboardCover(imageHeight, token("card_image_aspect", 0.75f),
                                      imageRadius("card_image_radius", radius, pad, 4.f),
-                                     imageAlign("card_image_align", brls::ImageAlignment::CENTER));
+                                     imageAlign("card_image_align", brls::ImageAlignment::CENTER),
+                                     imageFit("card_image_fit", brls::ImageScalingType::FIT),
+                                     maxWidth);
     cell->addView(cover);
 
     auto* title = new brls::Label();
@@ -696,20 +713,21 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     const float fixedHeight = token("hero_fixed_height", 0.f);
 
     const float gap = token("hero_gap", 20.f);
-    const float maxAspect = token("hero_image_max_aspect", 1.4f);
+    const float aspect = token("hero_image_aspect", 0.75f);   // 3:4 baseline
     const float cardHeight = fixedHeight > 0.f ? fixedHeight - 44.f : 0.f;
     const float coverHeight = cardHeight > 0.f ? cardHeight - pad * 2
-                                                 : token("hero_image_height", heroImageW * 1.4f);
+                                                 : token("hero_image_height", heroImageW / aspect);
 
     /* The reserve is constant so the title/meta/description column never moves; the tile
-     * wraps the cover inside it, and the cover is centered in the space available. */
-    const float reserveWidth = std::max(heroImageW, coverHeight * maxAspect);
+     * wraps the cover box inside it, and the box is centered in the space available. */
+    const float reserveWidth = std::max(heroImageW, coverHeight * aspect);
     const float textWidth = std::min(token("hero_text_width", 860.f),
                                      columnWidth - reserveWidth - pad * 2 - gap);
 
-    heroCover_ = new DashboardCover(coverHeight, coverHeight * maxAspect,
+    heroCover_ = new DashboardCover(coverHeight, aspect,
                                     imageRadius("hero_image_radius", radius, pad, 4.f),
-                                    imageAlign("hero_image_align", brls::ImageAlignment::CENTER));
+                                    imageAlign("hero_image_align", brls::ImageAlignment::CENTER),
+                                    imageFit("hero_image_fit", brls::ImageScalingType::FIT));
 
     auto& games = AppState::instance().gamesFor(systemIds_.empty() ? std::string() : systemIds_.front());
 
