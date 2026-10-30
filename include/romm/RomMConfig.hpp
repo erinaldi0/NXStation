@@ -28,6 +28,22 @@ struct RomMConfig {
     bool stateCoreMatching = true;  // Only restore states to compatible cores
     std::string romMappingFile = "romm_mappings.json"; // ROM ID mapping file (must not collide with the library cache)
 
+    /**
+     * Art + metadata come from the RomM server's already-cached provider images instead of
+     * querying ScreenScraper per ROM (one request per ROM instead of hash + API query +
+     * rate-limited asset GETs). WebP is not decodable by stb_image, so PNG/JPEG sources are
+     * preferred and WebP-only entries fall back to the ScreenScraper URL.
+     */
+    bool fetchArtFromRomM = true;
+    bool artFallbackScraper = true;   // ScreenScraper URL for entries RomM has no cached media for
+    /**
+     * Also fetch covers/thumbnails for rows that are still remote. Art is resolved by stem from
+     * the system's images folder, so no ROM file is needed — but a large library writes an image
+     * for every ROM on the server, so this is separate from the downloaded-ROM path. Videos and
+     * manuals stay with downloaded ROMs.
+     */
+    bool artForRemoteRoms = true;
+
     // Runtime-only (not persisted to config file)
     std::string accessToken;        // Bearer token for API calls
     std::string clientToken;        // Pairing client token

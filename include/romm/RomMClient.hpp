@@ -64,6 +64,16 @@ struct RomMLibraryEntry {
     std::string publisher;
     std::string releaseDate;
     std::string coverUrl;
+    /**
+     * Provider images RomM has already fetched and cached on disk (SimpleRomSchema paths).
+     * Served under `{baseUrl}/assets/romm/resources/...`, so art downloads need no provider
+     * query. Paths may carry a `?ts=` cache-buster; `RomMArtFetcher::assetUrl` resolves them.
+     */
+    std::string coverSmallPath;
+    std::string coverLargePath;
+    std::vector<std::string> screenshotPaths;
+    std::string videoPath;
+    std::string manualPath;
     /** Sibling ROMs of a multi-disc set (e.g. The Legend of Dragoon discs). */
     std::vector<std::string> siblingNames;
 
@@ -151,6 +161,14 @@ public:
     bool downloadToUrl(const std::string& url, const std::string& localPath,
                        const sf::cloud::ProgressFn& progress = {}, bool allowResume = false);
     std::string buildUrlPublic(const std::string& path) const { return buildUrl(path); }
+
+    /**
+     * URL for one of RomM's cached provider images. Resource paths returned by the API
+     * (`path_cover_small`, `path_video`, ...) are relative to the static mount
+     * `{baseUrl}/assets/romm/resources/`, so this must not use buildUrl(), which injects /api.
+     * A `?ts=` cache-buster is kept, and an already-absolute URL is passed through unchanged.
+     */
+    std::string assetUrl(const std::string& path) const;
 
 private:
     sf::cloud::CurlHelper curl_;

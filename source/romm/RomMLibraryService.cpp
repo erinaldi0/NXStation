@@ -7,6 +7,7 @@
 #include "util/Json.hpp"
 #include "util/Logger.hpp"
 #include "util/Paths.hpp"
+#include "util/Url.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -80,6 +81,16 @@ bool RomMLibraryService::loadCache() {
             entry.rom.folderName = item.value("folder_name", std::string());
             entry.rom.fsName = item.value("fs_name", std::string());
             entry.rom.summary = item.value("summary", std::string());
+            entry.rom.coverSmallPath = item.value("cover_small_path", std::string());
+            entry.rom.coverLargePath = item.value("cover_large_path", std::string());
+            entry.rom.videoPath = item.value("video_path", std::string());
+            entry.rom.manualPath = item.value("manual_path", std::string());
+            if (item.contains("screenshots") && item["screenshots"].is_array()) {
+                for (const auto& s : item["screenshots"]) {
+                    if (s.is_string() && !s.get<std::string>().empty())
+                        entry.rom.screenshotPaths.push_back(s.get<std::string>());
+                }
+            }
             entry.rom.multiFile = item.contains("multi_file") && item["multi_file"].is_boolean()
                                        ? item["multi_file"].get<bool>() : false;
             if (item.contains("files") && item["files"].is_array()) {
@@ -136,6 +147,14 @@ bool RomMLibraryService::saveCache() const {
         obj["fs_name"] = entry.rom.fsName;
         obj["multi_file"] = entry.rom.multiFile;
         obj["summary"] = entry.rom.summary;
+        obj["cover_small_path"] = entry.rom.coverSmallPath;
+        obj["cover_large_path"] = entry.rom.coverLargePath;
+        obj["video_path"] = entry.rom.videoPath;
+        obj["manual_path"] = entry.rom.manualPath;
+        Json screenshots = Json::array();
+        for (const auto& shot : entry.rom.screenshotPaths)
+            screenshots.push_back(shot);
+        obj["screenshots"] = std::move(screenshots);
         Json files = Json::array();
         for (const auto& f : entry.rom.files) {
             Json file = Json::object();
@@ -274,24 +293,8 @@ void RomMLibraryService::matchToSystems(std::vector<LibraryEntry>& entries) {
 
 namespace {
 
-/** Percent-encode a single URL path segment (RomM file names commonly contain spaces). */
-std::string encodePathSegment(const std::string& value) {
-    static const char* safe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
-    std::string out;
-    out.reserve(value.size());
-    for (unsigned char c : value) {
-        if (strchr(safe, c)) {
-            out.push_back(static_cast<char>(c));
-        } else if (c == '/') {
-            out.push_back('/');
-        } else {
-            out += "%";
-            out += "0123456789ABCDEF"[(c >> 4) & 0xF];
-            out += "0123456789ABCDEF"[c & 0xF];
-        }
-    }
-    return out;
-}
+// Percent-encoding lives in util/Url.hpp so the asset URL builder in RomMClient shares it.
+using sf::url::encodePathSegment;
 
 /** File name suitable as the ZIP output name for a multi-part ROM. */
 std::string zipNameFor(const RomMLibraryEntry& rom) {

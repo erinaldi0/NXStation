@@ -6,6 +6,7 @@
 #include "romm/RomMSaveMapper.hpp"
 #include "romm/RomMStateStore.hpp"
 #include "romm/RomMLibraryService.hpp"
+#include "romm/RomMArtFetcher.hpp"
 
 #include <string>
 #include <functional>
@@ -97,6 +98,15 @@ public:
     /** Get the library service for ROM browsing/downloading. */
     RomMLibraryService& library() { return *library_; }
 
+    /** Cached provider images on the server: covers, screenshots, video, manuals. */
+    RomMArtFetcher& art() { return *art_; }
+
+    /**
+     * Fetch one entry's assets on the calling (worker) thread, immediately after its ROM lands,
+     * so the row has art without waiting for a full batch.
+     */
+    void fetchArtForEntry(const LibraryEntry& entry, std::atomic<bool>* abort = nullptr);
+
     /** Refresh internal config from Config singleton (call after settings change). */
     void refreshConfig();
 
@@ -110,6 +120,7 @@ private:
     std::unique_ptr<RomMStateStore> store_;
     std::unique_ptr<RomMSyncEngine> syncEngine_;
     std::unique_ptr<RomMLibraryService> library_;
+    std::unique_ptr<RomMArtFetcher> art_;
 
     std::atomic<bool> syncInProgress_{false};
     bool enabled_ = false;

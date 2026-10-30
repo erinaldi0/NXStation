@@ -35,6 +35,12 @@ public:
     void setRateLimitMs(size_t ms) { rateLimitMs_ = ms; }
     void cancelInflight();
 
+    /**
+     * Download one asset to `dest` (public so RomMArtFetcher can use the ScreenScraper URL as a
+     * fallback for entries RomM has no cached media for, or a WebP-only cover).
+     */
+    bool downloadAsset(const std::string& url, const std::string& dest, bool preserveFormat = false);
+
 private:
     void releaseInFlight(const std::string& path);
     bool acquireSlot();
@@ -46,7 +52,6 @@ private:
     std::string buildQueryUrl(const GameItem& game, const SystemConfig& system, const std::string& crc);
     bool parseScreenScraperJson(const std::string& json, GameMetadata& out, std::string& error,
                                 std::vector<std::string>* manualUrlsOut = nullptr);
-    bool downloadAsset(const std::string& url, const std::string& dest, bool preserveFormat = false);
 
     size_t rateLimitMs_ = 350;
 

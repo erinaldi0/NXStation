@@ -74,6 +74,7 @@ void RomMService::applyConfig(const RomMConfig& config) {
     store_ = std::make_unique<RomMStateStore>(config_);
     syncEngine_ = std::make_unique<RomMSyncEngine>(client_, *mapper_, *store_, config_);
     library_ = std::make_unique<RomMLibraryService>(client_, config_);
+    art_ = std::make_unique<RomMArtFetcher>(client_, config_);
 }
 
 void RomMService::refreshConfig() {
@@ -89,6 +90,8 @@ void RomMService::refreshConfig() {
     config_.conflictPolicy = latestConfig.conflictPolicy;
     config_.stateCoreMatching = latestConfig.stateCoreMatching;
     config_.romMappingFile = latestConfig.romMappingFile;
+    config_.fetchArtFromRomM = latestConfig.fetchArtFromRomM;
+    config_.artFallbackScraper = latestConfig.artFallbackScraper;
     
     // Update enabled state
     enabled_ = config_.enabled && !config_.serverUrl.empty();
@@ -277,11 +280,13 @@ void RomMService::populateVirtualLibrary() {
             g.meta.releaseDate = entry.rom.releaseDate;
         }
 
-        // Local scrape cache hits for already-downloaded titles still show art / metadata.
-        if (entry.downloadedLocally) {
-            AppState::instance().metaCache().applyLocalMedia(g.meta, entry.matchedSystemId,
-                                                             FileSystem::stemOf(entry.localPath));
-        }
+        // Local scrape cache hits for already-downloaded titles still show art / metadata. Art is
+        // resolved by stem from the system's images folder, so a still-remote row can show the cover
+        // the fetcher pulled for it too — provided the stem here is the one the fetcher wrote the
+        // files under, which is what stemFor gives for both kinds of row.
+        const std::string artStem = RomMArtFetcher::stemFor(entry);
+        if (!artStem.empty() && !entry.matchedSystemId.empty())
+            AppState::instance().metaCache().applyLocalMedia(g.meta, entry.matchedSystemId, artStem);
 
         if (g.cloudAvailable && !g.systemId.empty()) {
             cloudBySystem[g.systemId].push_back(g);
@@ -336,6 +341,16 @@ void RomMService::populateVirtualLibrary() {
     SF_LOG_I("RomM", "Virtual library: %zu entries (%zu downloaded)", total, downloaded);
 }
 
+void RomMService::fetchArtForEntry(const LibraryEntry& entry, std::atomic<bool>* abort) {
+    if (!enabled_ || !config_.fetchArtFromRomM || !client_.isReady() || !art_)
+        return;
+
+    sf::ScrapeProgress progress;
+    progress.total = 1;
+    progress.index = 1;
+    art_->fetchEntryArt(entry, progress, nullptr, abort);
+}
+
 void RomMService::refreshLibraryAsync(std::function<void(bool, const std::string&)> done) {
     refreshConfig();
     if (!enabled_ || !client_.isReady()) {
@@ -347,6 +362,17 @@ void RomMService::refreshLibraryAsync(std::function<void(bool, const std::string
         std::vector<LibraryEntry> out;
         bool ok = library_->fetchLibrary(out);
         std::string message = ok ? "Library refreshed" : client_.lastError();
+
+        // The server already has the provider images cached, so art for anything still missing is
+        // one GET per asset here instead of a hash + API query + rate-limited download per ROM.
+        if (ok && config_.fetchArtFromRomM && art_) {
+            const ArtBatchStats stats = art_->fetchBatchBlocking(out, nullptr, nullptr);
+            if (stats.succeeded + stats.failed > 0) {
+                message += " — art " + std::to_string(stats.succeeded) + " fetched, "
+                           + std::to_string(stats.failed) + " failed, "
+                           + std::to_string(stats.skipped) + " skipped";
+            }
+        }
 
         if (done) {
             brls::sync([done = std::move(done), ok, message]() mutable {
@@ -404,6 +430,12 @@ void RomMService::downloadRomAsync(const LibraryEntry& entry,
                 : FileSystem::join(destDir, entry.rom.files.front().fileName);
             mapper_->addOrUpdateMapping(entry.rom.id, entry.matchedSystemId, localPath,
                                         entry.rom.name, sys ? sys->core : "");
+
+            // Art for the ROM that just landed: fetch it here so the row has a cover without
+            // waiting for a batch run. The cached entry carries the resolved local path.
+            if (saved)
+                fetchArtForEntry(*saved, abort);
+
             message = "Downloaded to " + localPath;
         } else {
             message = abort && abort->load() ? "Download cancelled" : client_.lastError();

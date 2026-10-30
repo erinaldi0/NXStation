@@ -4,6 +4,9 @@
 #include "ui/ThemeManager.hpp"
 #include "romm/RomMService.hpp"
 #include "romm/RomMConfig.hpp"
+#include "romm/RomMArtFetcher.hpp"
+#include "scraper/ScrapeTypes.hpp"
+#include "util/Network.hpp"
 #include "app/Config.hpp"
 #include "app/AppState.hpp"
 #include "util/Logger.hpp"
@@ -262,6 +265,189 @@ private:
     bool cancelled_ = false;
 };
 
+/**
+ * Progress page for the RomM art batch. Same shape as RomMSyncView: the fetch runs on a pool
+ * worker and the callbacks are marshalled back to the main thread, so the view is only touched
+ * from the UI thread.
+ */
+class RomMArtFetchView : public brls::Box {
+public:
+    explicit RomMArtFetchView(std::function<void(bool)> onFinished)
+        : onFinished_(std::move(onFinished)) {
+        auto& theme = ThemeManager::instance();
+        this->setAxis(brls::Axis::COLUMN);
+        this->setGrow(1.0f);
+        this->setBackgroundColor(theme.color("brls/background"));
+        this->setAlignItems(brls::AlignItems::CENTER);
+        this->setJustifyContent(brls::JustifyContent::CENTER);
+        this->setFocusable(true);
+        this->setHideHighlight(true);
+
+        titleLabel_ = new brls::Label();
+        titleLabel_->setFontSize(32);
+        titleLabel_->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        titleLabel_->setTextColor(theme.color("brls/text"));
+        titleLabel_->setText("Fetch Art from RomM");
+        this->addView(titleLabel_);
+
+        // Downloaded ROMs, plus remote rows when the remote toggle is on.
+        auto& romm = sf::romm::RomMService::instance();
+        auto& fetcher = romm.art();
+        size_t pending = 0;
+        for (const auto& entry : romm.library().entries()) {
+            if (fetcher.entryIsFetchable(entry) && !fetcher.entryArtComplete(entry))
+                ++pending;
+        }
+
+        countLabel_ = new brls::Label();
+        countLabel_->setFontSize(20);
+        countLabel_->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        countLabel_->setTextColor(theme.color("nxstation/detail_text"));
+        countLabel_->setMarginTop(8);
+        countLabel_->setText(pending == 1 ? "1 ROM to fetch" : std::to_string(pending) + " ROMs to fetch");
+        this->addView(countLabel_);
+
+        progressTrack_ = new brls::Box();
+        progressTrack_->setWidth(kTrackWidth);
+        progressTrack_->setHeight(8);
+        progressTrack_->setMarginTop(24);
+        progressTrack_->setBackgroundColor(theme.color("nxstation/card_bg"));
+        this->addView(progressTrack_);
+
+        progressFill_ = new brls::Box();
+        progressFill_->setHeight(8);
+        progressFill_->setWidth(0);
+        progressFill_->setBackgroundColor(theme.color("brls/accent"));
+        this->addView(progressFill_);
+
+        statusLabel_ = new brls::Label();
+        statusLabel_->setFontSize(20);
+        statusLabel_->setHorizontalAlign(brls::HorizontalAlign::CENTER);
+        statusLabel_->setTextColor(theme.color("nxstation/detail_text"));
+        statusLabel_->setMarginTop(16);
+        statusLabel_->setSingleLine(false);
+        statusLabel_->setText("Preparing fetch…");
+        this->addView(statusLabel_);
+
+        spinner_ = new brls::ProgressSpinner();
+        spinner_->setMarginTop(16);
+        this->addView(spinner_);
+
+        this->registerAction("Cancel", brls::ControllerButton::BUTTON_B, [this](brls::View*) {
+            cancelled_ = true;
+            if (running_ && !finished_)
+                sf::romm::RomMService::instance().art().requestAbort();
+            if (onFinished_) onFinished_(false);
+            brls::Application::popActivity(brls::TransitionAnimation::FADE);
+            return true;
+        });
+    }
+
+    void willAppear(bool resetState) override {
+        *alive_ = true;
+        brls::Box::willAppear(resetState);
+        if (!running_ && !finished_)
+            startFetch();
+    }
+
+    void willDisappear(bool resetState) override {
+        *alive_ = false;
+        if (running_ && !finished_)
+            sf::romm::RomMService::instance().art().requestAbort();
+        brls::Box::willDisappear(resetState);
+    }
+
+    void setStatus(const std::string& status) {
+        if (!*alive_)
+            return;
+        statusLabel_->setText(status);
+    }
+
+    void setPercent(int percent) {
+        if (!*alive_)
+            return;
+        percent_ = percent < 0 ? 0 : (percent > 100 ? 100 : percent);
+        progressFill_->setWidth(kTrackWidth * static_cast<float>(percent_) / 100.0f);
+    }
+
+private:
+    static constexpr float kTrackWidth = 320.f;
+
+    void startFetch() {
+        running_ = true;
+        auto& romm = sf::romm::RomMService::instance();
+        auto& fetcher = romm.art();
+
+        std::vector<sf::romm::LibraryEntry> targets;
+        for (const auto& entry : romm.library().entries()) {
+            if (fetcher.entryIsFetchable(entry) && !fetcher.entryArtComplete(entry))
+                targets.push_back(entry);
+        }
+
+        if (targets.empty()) {
+            finished_ = true;
+            spinner_->setVisibility(brls::Visibility::GONE);
+            setStatus("Nothing to fetch — every fetchable ROM already has art");
+            if (onFinished_) onFinished_(true);
+            return;
+        }
+
+        auto alive = alive_;
+        fetcher.fetchBatchAsync(
+            std::move(targets),
+            [this, alive](const sf::ScrapeProgress& progress) {
+                if (!*alive)
+                    return;
+
+                const size_t completed = progress.succeeded + progress.failed + progress.skipped;
+                if (progress.total > 0)
+                    setPercent(static_cast<int>(completed * 100 / progress.total));
+
+                std::string status = "ROM " + std::to_string(progress.index) + " of "
+                                     + std::to_string(progress.total) + " — " + progress.gameName;
+                if (!progress.phase.empty())
+                    status += " · " + progress.phase;
+                if (!progress.detail.empty())
+                    status += ": " + progress.detail;
+                setStatus(status);
+            },
+            [this, alive](size_t succeeded, size_t failed, size_t skipped, bool aborted) {
+                if (!*alive)
+                    return;
+
+                running_ = false;
+                finished_ = true;
+                spinner_->setVisibility(brls::Visibility::GONE);
+
+                const size_t processed = succeeded + failed + skipped;
+                std::string summary = aborted ? "Aborted — " : "Fetched ";
+                summary += std::to_string(succeeded) + " of " + std::to_string(processed);
+                if (failed > 0)
+                    summary += ", " + std::to_string(failed) + " failed";
+                if (skipped > 0)
+                    summary += ", " + std::to_string(skipped) + " skipped";
+
+                setStatus(summary);
+                statusLabel_->setTextColor(ThemeManager::instance().color(succeeded > 0 ? "success" : "error"));
+
+                if (onFinished_) onFinished_(succeeded > 0);
+            });
+    }
+
+    std::function<void(bool)> onFinished_;
+    brls::Label* titleLabel_ = nullptr;
+    brls::Label* countLabel_ = nullptr;
+    brls::Label* statusLabel_ = nullptr;
+    brls::ProgressSpinner* spinner_ = nullptr;
+    brls::Box* progressTrack_ = nullptr;
+    brls::Box* progressFill_ = nullptr;
+    std::shared_ptr<bool> alive_ = std::make_shared<bool>(false);
+    int percent_ = 0;
+    bool running_ = false;
+    bool finished_ = false;
+    bool cancelled_ = false;
+};
+
 void buildRomMSettingsRows(brls::Box* listBox) {
     auto& config = sf::Config::instance();
     auto& rommConfig = config.rommConfig();
@@ -450,6 +636,62 @@ void buildRomMSettingsRows(brls::Box* listBox) {
     styleSettingsCell(coreMatchRow);
     listBox->addView(coreMatchRow);
 
+    // Art and metadata source
+    auto artFetchDetail = [&rommConfig]() -> std::string {
+        return rommConfig.fetchArtFromRomM ? "On" : "Off";
+    };
+    auto artFallbackDetail = [&rommConfig]() -> std::string {
+        if (!rommConfig.fetchArtFromRomM)
+            return "Off (art fetch disabled)";
+        return rommConfig.artFallbackScraper ? "On (WebP-only entries)" : "Off";
+    };
+    auto remoteArtDetail = [&rommConfig]() -> std::string {
+        if (!rommConfig.fetchArtFromRomM)
+            return "Off (art fetch disabled)";
+        return rommConfig.artForRemoteRoms ? "On (images only)" : "Off (downloaded ROMs only)";
+    };
+
+    auto* artRow = makeSettingsRow("Fetch Art from RomM", artFetchDetail());
+    auto* artFallbackRow = makeSettingsRow("ScreenScraper Fallback", artFallbackDetail());
+    auto* remoteArtRow = makeSettingsRow("Fetch Art for Remote ROMs", remoteArtDetail());
+
+    // All three rows show the combined state, and the fetcher reads the service's copy of the
+    // config, so refreshConfig() has to run for a change to apply on the next batch.
+    auto updateArtRows = [artRow, artFallbackRow, remoteArtRow, artFetchDetail, artFallbackDetail,
+                          remoteArtDetail, &rommConfig, &romm, &config](const char* rowName) {
+        artRow->setDetailText(artFetchDetail());
+        artFallbackRow->setDetailText(artFallbackDetail());
+        remoteArtRow->setDetailText(remoteArtDetail());
+        romm.refreshConfig();
+        config.saveUserSettings();
+        config.saveRomMConfig();
+        SF_LOG_I("RomMArt", "Settings: %s", rowName);
+    };
+
+    artRow->registerClickAction([artRow, updateArtRows, &rommConfig](brls::View*) {
+        rommConfig.fetchArtFromRomM = !rommConfig.fetchArtFromRomM;
+        updateArtRows("Fetch Art from RomM");
+        return true;
+    });
+    styleSettingsCell(artRow);
+    listBox->addView(artRow);
+
+    artFallbackRow->registerClickAction([artFallbackRow, updateArtRows, &rommConfig](brls::View*) {
+        rommConfig.artFallbackScraper = !rommConfig.artFallbackScraper;
+        updateArtRows("ScreenScraper Fallback");
+        return true;
+    });
+    styleSettingsCell(artFallbackRow);
+    listBox->addView(artFallbackRow);
+
+    remoteArtRow->registerClickAction([remoteArtRow, updateArtRows, &rommConfig](brls::View*) {
+        rommConfig.artForRemoteRoms = !rommConfig.artForRemoteRoms;
+        updateArtRows("Fetch Art for Remote ROMs");
+        return true;
+    });
+    styleSettingsCell(remoteArtRow);
+    listBox->addView(remoteArtRow);
+
     // Manual sync button
     // Last sync status (declared before Sync Now so the sync callback can update it)
     auto* lastSyncRow = makeSettingsRow("Last Sync", romm.lastSyncResult().empty() ? "Never" : romm.lastSyncResult());
@@ -484,6 +726,29 @@ void buildRomMSettingsRows(brls::Box* listBox) {
     });
     styleSettingsCell(refreshRow);
     listBox->addView(refreshRow);
+
+    // Art batch (Last Art Fetch is declared before Fetch Art Now so the batch can update it)
+    auto* lastArtRow = makeSettingsRow("Last Art Fetch",
+                                       romm.art().lastSummary().empty() ? "Never" : romm.art().lastSummary());
+
+    auto* fetchArtRow = makeSettingsRow("Fetch Art Now",
+                                        "Cached covers, snapshots, videos, manuals (remote rows: images only)");
+    fetchArtRow->registerClickAction([lastArtRow, &romm, &rommConfig](brls::View*) {
+        if (!rommConfig.fetchArtFromRomM) {
+            brls::Application::notify("Art fetch is disabled");
+            return true;
+        }
+        auto* view = new RomMArtFetchView([lastArtRow, &romm](bool) {
+            lastArtRow->setDetailText(romm.art().lastSummary().empty() ? "Never" : romm.art().lastSummary());
+            // Rebuild the rows so the files just written show up without a full rescan.
+            romm.populateVirtualLibrary();
+            sf::ui::SystemsTab::requestRefreshAfterSettings();
+        });
+        brls::Application::pushActivity(new RomMSyncActivity(view));
+        return true;
+    });
+    styleSettingsCell(fetchArtRow);
+    listBox->addView(fetchArtRow);
 
     // Last sync status
     styleSettingsCell(lastSyncRow);

@@ -616,6 +616,9 @@ bool Config::loadRomMConfig()
         rc.syncAfterReturn = j.value("sync_after_return", true);
         rc.conflictPolicy = romm::conflictPolicyFromString(j.value("conflict_policy", std::string("keep_both")));
         rc.stateCoreMatching = j.value("state_core_matching", true);
+        rc.fetchArtFromRomM = j.value("fetch_art_from_romm", true);
+        rc.artFallbackScraper = j.value("art_fallback_scraper", true);
+        rc.artForRemoteRoms = j.value("art_for_remote_roms", true);
         rc.romMappingFile = j.value("rom_mapping_file", std::string("romm_mappings.json"));
         // Older settings stored the mapping file under the library-cache name, which made the
         // two services overwrite each other; force the split for existing installs.
@@ -645,6 +648,9 @@ bool Config::saveRomMConfig()
     root["sync_after_return"] = rc.syncAfterReturn;
     root["conflict_policy"] = romm::conflictPolicyToString(rc.conflictPolicy);
     root["state_core_matching"] = rc.stateCoreMatching;
+    root["fetch_art_from_romm"] = rc.fetchArtFromRomM;
+    root["art_fallback_scraper"] = rc.artFallbackScraper;
+    root["art_for_remote_roms"] = rc.artForRemoteRoms;
     root["rom_mapping_file"] = rc.romMappingFile;
 
     const std::string path = romm::defaultConfigPath();

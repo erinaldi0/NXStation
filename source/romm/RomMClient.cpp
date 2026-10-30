@@ -3,8 +3,10 @@
 #include "util/Json.hpp"
 #include "util/Logger.hpp"
 #include "util/FileSystem.hpp"
+#include "util/Url.hpp"
 
 #include <sstream>
+#include <cstdio>
 #include <ctime>
 #include <iomanip>
 
@@ -43,6 +45,55 @@ std::string joinedStringField(const Json& obj, const std::string& key) {
         out += s;
     }
     return out;
+}
+
+/** Collect a JSON array of strings, e.g. `merged_screenshots`. */
+std::vector<std::string> stringArrayField(const Json& obj, const std::string& key) {
+    std::vector<std::string> out;
+    if (!obj.contains(key) || !obj[key].is_array())
+        return out;
+    for (const auto& v : obj[key]) {
+        if (!v.is_string())
+            continue;
+        const std::string s = v.get<std::string>();
+        if (!s.empty())
+            out.push_back(s);
+    }
+    return out;
+}
+
+/**
+ * Release dates arrive as epoch seconds (ScreenScraper) or epoch milliseconds (the merged
+ * `metadatum` row), and some builds send them as a plain string. `jsonStringField` returns
+ * nothing for a number, so date fields must be read with this instead.
+ */
+std::string releaseDateField(const Json& obj, const std::string& key) {
+    if (!obj.contains(key))
+        return {};
+    const Json& v = obj[key];
+    if (v.is_string())
+        return v.get<std::string>();
+    if (!v.is_number())
+        return {};
+
+    double value = v.get<double>();
+    if (value <= 0)
+        return {};
+    if (value > 1e12)  // epoch milliseconds
+        value /= 1000.0;
+
+    const std::time_t seconds = static_cast<std::time_t>(value);
+    std::tm tm = {};
+#if defined(_WIN32)
+    if (gmtime_s(&tm, &seconds) != 0)
+        return {};
+#else
+    if (!gmtime_r(&seconds, &tm))
+        return {};
+#endif
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d", tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday);
+    return buf;
 }
 
 time_t parseIso8601(const std::string& str) {
@@ -132,9 +183,17 @@ RomMLibraryEntry parseLibraryEntry(const Json& item) {
         entry.genres = joinedStringField(meta, "genres");
         entry.developer = joinedStringField(meta, "developers");
         entry.publisher = joinedStringField(meta, "publishers");
-        entry.releaseDate = jsonStringField(meta, "first_release_date");
+        entry.releaseDate = releaseDateField(meta, "first_release_date");
     }
     entry.coverUrl = jsonStringField(item, "url_cover");
+
+    // Cached provider images. Present only when the server has media on disk (scan with
+    // media processing on); the fetcher falls back to `url_cover` when these are empty.
+    entry.coverSmallPath = jsonStringField(item, "path_cover_small");
+    entry.coverLargePath = jsonStringField(item, "path_cover_large");
+    entry.screenshotPaths = stringArrayField(item, "merged_screenshots");
+    entry.videoPath = jsonStringField(item, "path_video");
+    entry.manualPath = jsonStringField(item, "path_manual");
 
     if (item.contains("sibling_roms") && item["sibling_roms"].is_array()) {
         for (const auto& s : item["sibling_roms"]) {
@@ -169,6 +228,29 @@ void RomMClient::configure(const std::string& serverUrl, const std::string& acce
 
 std::string RomMClient::buildUrl(const std::string& path) const {
     return baseUrl_ + "/api" + path;
+}
+
+std::string RomMClient::assetUrl(const std::string& path) const {
+    if (path.empty())
+        return {};
+
+    // Split the `?ts=...` cache-buster off the resource path; it is a query, not part of it.
+    std::string assetPath = path;
+    std::string query;
+    if (const auto q = assetPath.find('?'); q != std::string::npos) {
+        query = assetPath.substr(q);
+        assetPath.resize(q);
+    }
+
+    // Some fields already carry a full URL (url_cover points at the provider), and some
+    // already include the mount. Anything else is relative to /assets/romm/resources/.
+    if (assetPath.rfind("http://", 0) == 0 || assetPath.rfind("https://", 0) == 0)
+        return path;
+    if (assetPath.front() != '/')
+        assetPath = "/assets/romm/resources/" + assetPath;
+
+    // baseUrl_ may include a reverse-proxy subpath, so build from it rather than the host root.
+    return baseUrl_ + url::encodePathSegment(assetPath) + query;
 }
 
 void RomMClient::updateAuthHeaders() {

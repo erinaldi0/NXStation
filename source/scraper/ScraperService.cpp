@@ -8,6 +8,7 @@
 
 #include "scraper/MetadataCache.hpp"
 #include "scraper/ImageOptimizer.hpp"
+#include "scraper/ScrapeUrls.hpp"
 #include "media/ManualPages.hpp"
 
 #include "util/FileSystem.hpp"
@@ -176,53 +177,6 @@ size_t mediaBytes(const Json& media)
     }
 
     return SIZE_MAX;
-
-}
-
-
-
-/** Ask ScreenScraper to resize/transcode server-side so the download itself is small. */
-std::string withServerResize(const std::string& url, int maxWidth)
-
-{
-
-    if (url.find("screenscraper.fr") == std::string::npos)
-
-        return url;
-
-    std::string out = url;
-
-    out += (out.find('?') == std::string::npos) ? '?' : '&';
-
-    out += "maxwidth=" + std::to_string(maxWidth) + "&outputformat=jpg";
-
-    return out;
-
-}
-
-
-
-std::string preferJpegUrl(const std::string& url)
-
-{
-
-    const auto dot = url.rfind('.');
-
-    if (dot == std::string::npos)
-
-        return url;
-
-    std::string ext = url.substr(dot);
-
-    std::transform(ext.begin(), ext.end(), ext.begin(),
-
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-
-    if (ext == ".png" || ext == ".webp")
-
-        return url.substr(0, dot) + ".jpg";
-
-    return url;
 
 }
 
