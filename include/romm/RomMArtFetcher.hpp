@@ -34,8 +34,10 @@ using ArtProgressCb = std::function<void(const sf::ScrapeProgress&)>;
  * Assets land in the locations the UI already reads (MetadataCache::artworkPath,
  * MetadataCache::videoCachePath, ManualPages::pdfPath), so no view code has to change.
  *
- * Only JPEG and PNG sources are used — borealis decodes images with stb_image, which has no
- * WebP support, so a WebP-only entry falls back to its ScreenScraper URL (server-resized JPEG).
+ * WebP sources are decoded at fetch time (scraper/WebpDecoder, portlib libwebp) and written as
+ * JPEG, so the display path — borealis stb_image, which has no WebP support — never sees one.
+ * Other formats stb_image cannot decode still fall back to the ScreenScraper URL when the
+ * fallback toggle is on.
  *
  * This is the per-entry worker; the queued, multi-threaded form lives in RomMArtQueue, which gives
  * each worker its own client (CurlHelper serializes on one mutex per instance).
@@ -66,6 +68,15 @@ public:
 
     /** True when every asset the config asks for is already on disk for this entry. */
     bool entryArtComplete(const LibraryEntry& entry) const;
+
+    /**
+     * True when this entry has at least one source the fetcher could actually download for
+     * `thumbnail` (or the box when false): a decodable cached asset path, an absolute provider
+     * URL, or — with the fallback toggle on — the ScreenScraper cover URL. An entry with no
+     * source can never complete, so entryArtComplete treats those as complete rather than
+     * leaving them permanently queueable.
+     */
+    bool entryHasSource(const LibraryEntry& entry, bool thumbnail) const;
 
 private:
     RomMClient& client_;

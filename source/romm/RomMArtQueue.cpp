@@ -56,17 +56,34 @@ size_t RomMArtQueue::enqueue(const std::vector<LibraryEntry>& entries) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     size_t queued = 0;
+    size_t capped = 0;
     for (const auto& entry : entries) {
+        if (entry.rom.id.empty())
+            continue;
+        // The same row can arrive again on the next Refresh Library while it is still queued, so
+        // dedupe by id; otherwise the pending list grows on every refresh.
+        if (pendingIds_.count(entry.rom.id))
+            continue;
+        if (attempts_[entry.rom.id] >= kMaxAttemptsPerEntry) {
+            ++capped;
+            continue;
+        }
         // The same filter the old serial batch used: only rows that still need an asset are carried,
         // so a rerun is the remaining work rather than the whole library.
         if (!filter_.entryIsFetchable(entry) || filter_.entryArtComplete(entry))
             continue;
         pending_.push_back(entry);
+        pendingIds_.insert(entry.rom.id);
         ++queued;
     }
 
-    if (queued == 0)
+    if (queued == 0) {
+        if (capped > 0)
+            SF_LOG_I("RomMArt", "%zu entries left out: they already reached %zu attempts "
+                               "(delete data/romm_art_queue.json to retry them)",
+                     capped, kMaxAttemptsPerEntry);
         return 0;
+    }
 
     status_.started = true;
     status_.total += queued;
@@ -197,15 +214,34 @@ bool RomMArtQueue::loadPending() {
 
     std::lock_guard<std::mutex> lock(mutex_);
     pending_.clear();
+    pendingIds_.clear();
+    attempts_.clear();
+
+    // New format: [{ "id": "...", "attempts": n }, ...]. Old files stored plain id strings, so
+    // accept both. The attempt counts have to survive restarts — they are what keeps a hopeless
+    // entry out of the queue after a reboot.
     for (const auto& item : j["pending"]) {
-        const std::string id = item.get<std::string>();
+        std::string id;
+        size_t attempts = 0;
+        if (item.type() == Json::Type::Object) {
+            id = item.value<std::string>("id", {});
+            attempts = item.value<size_t>("attempts", 0);
+        } else {
+            try {
+                id = item.get<std::string>();
+            } catch (const std::exception&) {
+                continue;
+            }
+        }
         if (id.empty())
             continue;
+        attempts_[id] = attempts;
         // Ids only: the entries themselves come from the library cache, which is what the UI rows are
         // built from. Ids whose ROM was removed since the last run drop out here.
         for (const auto& entry : library_.entries()) {
             if (entry.rom.id == id) {
                 pending_.push_back(entry);
+                pendingIds_.insert(id);
                 break;
             }
         }
@@ -252,6 +288,7 @@ void RomMArtQueue::workerLoop(int index) {
                 break;
             entry = std::move(pending_.front());
             pending_.erase(pending_.begin());
+            pendingIds_.erase(entry.rom.id);
             ++status_.processed;
             status_.current = entry.rom.name;
             indexSnapshot = status_.processed;
@@ -272,8 +309,12 @@ void RomMArtQueue::workerLoop(int index) {
             std::lock_guard<std::mutex> lock(mutex_);
             if (result.anyFetched() || result.metadataWritten)
                 ++status_.succeeded;
-            else if (result.failed > 0)
+            else if (result.failed > 0) {
                 ++status_.failed;
+                // Count the attempt against the cap; this is what stops an entry the server can
+                // never answer for from being re-queued by every Refresh Library.
+                attempts_[entry.rom.id]++;
+            }
             else
                 ++status_.skipped;
 
@@ -310,12 +351,27 @@ void RomMArtQueue::workerLoop(int index) {
 }
 
 void RomMArtQueue::savePendingLocked() {
-    Json ids = Json::array();
-    for (const auto& entry : pending_)
-        ids.push_back(entry.rom.id);
+    // Persist the attempt counts next to each id, so the cap survives a reboot. Entries still
+    // pending carry their own count; capped ones are kept as well, otherwise the next run would
+    // start them over and Refresh Library would re-add them.
+    Json items = Json::array();
+    for (const auto& entry : pending_) {
+        Json item = Json::object();
+        item["id"] = entry.rom.id;
+        item["attempts"] = attempts_[entry.rom.id];
+        items.push_back(item);
+    }
+    for (const auto& [id, attempts] : attempts_) {
+        if (pendingIds_.count(id) || attempts == 0)
+            continue;
+        Json item = Json::object();
+        item["id"] = id;
+        item["attempts"] = attempts;
+        items.push_back(item);
+    }
 
     Json root = Json::object();
-    root["pending"] = ids;
+    root["pending"] = items;
 
     const std::string path = queuePath();
     FileSystem::createDirectories(FileSystem::parentPath(path));

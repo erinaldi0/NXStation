@@ -257,8 +257,10 @@ std::string RomMClient::assetUrl(const std::string& path) const {
     if (assetPath.front() != '/')
         assetPath = "/assets/romm/resources/" + assetPath;
 
-    // baseUrl_ may include a reverse-proxy subpath, so build from it rather than the host root.
-    return baseUrl_ + url::encodePathSegment(assetPath) + query;
+    // baseUrl_ may include a reverse-proxy subpath, so build from it rather than the host root. The
+    // query is encoded too: `?ts=` carries a space, which makes the request line invalid and the server
+    // answers 400 for every cached asset.
+    return baseUrl_ + url::encodePathSegment(assetPath) + url::encodeQuery(query);
 }
 
 void RomMClient::updateAuthHeaders() {

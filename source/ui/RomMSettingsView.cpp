@@ -512,7 +512,7 @@ void buildRomMSettingsRows(brls::Box* listBox) {
     auto artFallbackDetail = [&rommConfig]() -> std::string {
         if (!rommConfig.fetchArtFromRomM)
             return "Off (art fetch disabled)";
-        return rommConfig.artFallbackScraper ? "On (WebP-only entries)" : "Off";
+        return rommConfig.artFallbackScraper ? "On (entries with no cached asset)" : "Off";
     };
     auto remoteArtDetail = [&rommConfig]() -> std::string {
         if (!rommConfig.fetchArtFromRomM)

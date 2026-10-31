@@ -65,6 +65,28 @@ bool RomMArtFetcher::entryIsFetchable(const LibraryEntry& entry) const {
     return config_.artForRemoteRoms && !stemFor(entry).empty();
 }
 
+bool RomMArtFetcher::entryHasSource(const LibraryEntry& entry, bool thumbnail) const {
+    auto usablePath = [this](const std::string& path) {
+        if (path.empty())
+            return false;
+        const std::string url = client_.assetUrl(path);
+        // A relative cached asset stb_image cannot decode has no sibling guess on the static
+        // mount, so it only counts as a source when it is already an absolute provider URL.
+        return decodableImageFormat(url) || absoluteUrl(url);
+    };
+
+    if (thumbnail) {
+        for (const auto& path : entry.rom.screenshotPaths)
+            if (usablePath(path))
+                return true;
+    }
+    if (usablePath(entry.rom.coverSmallPath) || usablePath(entry.rom.coverLargePath))
+        return true;
+
+    // ScreenScraper cover URL: a source only when the fallback toggle is on.
+    return config_.artFallbackScraper && !entry.rom.coverUrl.empty();
+}
+
 bool RomMArtFetcher::entryArtComplete(const LibraryEntry& entry) const {
     if (!entryIsFetchable(entry))
         return true;
@@ -73,9 +95,13 @@ bool RomMArtFetcher::entryArtComplete(const LibraryEntry& entry) const {
     auto& cache = AppState::instance().metaCache();
     const std::string stem = stemFor(entry);
 
-    if (cfg.scrapeBoxArt() && !present(cache.artworkPath(entry.matchedSystemId, stem, "box")))
+    // A missing asset with no downloadable source stays "complete": an entry the server can
+    // never answer for would otherwise be re-queued by every Refresh Library forever.
+    if (cfg.scrapeBoxArt() && !present(cache.artworkPath(entry.matchedSystemId, stem, "box"))
+        && entryHasSource(entry, false))
         return false;
-    if (cfg.scrapeThumbnail() && !present(cache.artworkPath(entry.matchedSystemId, stem, "thumb")))
+    if (cfg.scrapeThumbnail() && !present(cache.artworkPath(entry.matchedSystemId, stem, "thumb"))
+        && entryHasSource(entry, true))
         return false;
 
     // Video, manual and gamelist.xml are not written for remote rows, so they do not make an

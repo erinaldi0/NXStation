@@ -10,6 +10,7 @@
 #include <functional>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -47,6 +48,14 @@ using ArtStatusCb = std::function<void(const ArtJobStatus&)>;
  */
 class RomMArtQueue {
 public:
+    /**
+     * How many times one entry is attempted in total, across runs. An entry the server can never
+     * answer for — no cached asset, or a path the mount rejects — would otherwise be re-queued by
+     * every Refresh Library and the pending list would only grow. Delete `data/romm_art_queue.json`
+     * to start the attempts over.
+     */
+    static constexpr size_t kMaxAttemptsPerEntry = 3;
+
     RomMArtQueue(RomMClient& client, const RomMConfig& config, RomMLibraryService& library);
     ~RomMArtQueue();
 
@@ -57,6 +66,10 @@ public:
      * Queue the entries that still need an asset — the filter is entryIsFetchable + entryArtComplete,
      * so a rerun carries only the work left over instead of the whole library. Returns how many rows
      * were actually queued. Copies are stored: the library cache can reallocate its entries.
+     *
+     * A row already queued is not queued twice, and a row that has failed kMaxAttemptsPerEntry times
+     * is left out: without those two rules an entry that can never succeed is re-added by every
+     * Refresh Library, so the pending list only ever grows.
      */
     size_t enqueue(const std::vector<LibraryEntry>& entries);
     size_t enqueueEntry(const LibraryEntry& entry);
@@ -99,6 +112,10 @@ private:
     RomMArtFetcher filter_;
 
     std::vector<LibraryEntry> pending_;
+    /** Ids already in `pending_`, so Refresh Library cannot queue the same row twice. */
+    std::set<std::string> pendingIds_;
+    /** Attempts per rom id, persisted with the pending ids so a rerun does not restart them. */
+    std::map<std::string, size_t> attempts_;
     ArtJobStatus status_;
     mutable std::mutex mutex_;
     std::map<int, ArtStatusCb> listeners_;
