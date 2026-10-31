@@ -28,6 +28,10 @@ bool present(const std::string& path) {
     return !path.empty() && FileSystem::exists(path);
 }
 
+bool absoluteUrl(const std::string& url) {
+    return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
+}
+
 } // namespace
 
 RomMArtFetcher::RomMArtFetcher(RomMClient& client, const RomMConfig& config)
@@ -172,11 +176,16 @@ bool RomMArtFetcher::fetchImageAsset(const std::string& label, const std::string
             continue;
 
         std::string url = client_.assetUrl(path);
-        // stb_image has no WebP decoder, so a WebP asset has to be fetched as its JPEG sibling.
-        if (!decodableImageFormat(url))
-            url = preferJpegUrl(url);
-        if (!decodableImageFormat(url))
-            continue;
+        // stb_image has no WebP decoder. A provider URL usually has a .jpg sibling worth trying;
+        // RomM's own static mount serves the file verbatim — no sibling, no server-side resize — so
+        // a WebP asset there is skipped rather than guessed at, because that guess is a guaranteed
+        // 404 and every wasted round-trip is time the fetcher is being judged on.
+        if (!decodableImageFormat(url)) {
+            if (absoluteUrl(url))
+                url = preferJpegUrl(url);
+            if (!decodableImageFormat(url))
+                continue;
+        }
 
         if (downloadTo(url, dest, abort)) {
             ok = true;
@@ -304,17 +313,20 @@ ArtFetchResult RomMArtFetcher::fetchEntryArt(const LibraryEntry& entry, sf::Scra
                                        ? ManualPages::pdfPath(sys->path, stem)
                                        : std::string();
 
-    // The big cover is preferred for the box because RomM stores it as PNG/JPEG more often than
-    // the small one, which is usually WebP. Screenshots are JPEG, so they make a good thumbnail.
+    // Small cover first. It averages ~19 KB against ~388 KB for the big one, and the theme draws the
+    // box at card_image_height/card_width (about 90-160 px) up to the Focus height of ~190 px, so the
+    // small cover — ~190 px wide on average — is already at or above the size the UI draws. The big
+    // cover is still the fallback for the 10 in 12 ROMs whose small cover is WebP-only, which
+    // stb_image cannot decode.
     if (cfg.scrapeBoxArt()) {
-        fetchImageAsset("Box art", boxDest, {entry.rom.coverLargePath, entry.rom.coverSmallPath},
+        fetchImageAsset("Box art", boxDest, {entry.rom.coverSmallPath, entry.rom.coverLargePath},
                         entry.rom.coverUrl, false, progress, onProgress, abort, result);
     }
 
     if (cfg.scrapeThumbnail()) {
         std::vector<std::string> sources = entry.rom.screenshotPaths;
-        sources.push_back(entry.rom.coverLargePath);
         sources.push_back(entry.rom.coverSmallPath);
+        sources.push_back(entry.rom.coverLargePath);
         fetchImageAsset("Thumbnail", thumbDest, sources, entry.rom.coverUrl, true, progress, onProgress,
                         abort, result);
     }

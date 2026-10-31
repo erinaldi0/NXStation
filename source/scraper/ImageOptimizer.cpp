@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <fstream>
 #include <vector>
 
 namespace sf {
@@ -67,10 +68,33 @@ std::vector<uint8_t> toRgb(const uint8_t* src, int w, int h, int channels)
     return rgb;
 }
 
+/**
+ * Magic bytes, not the extension: the scraper writes every asset under a .jpg name even when the
+ * provider file is a PNG, so the extension says nothing about what is actually on disk.
+ */
+bool isJpegFile(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    unsigned char magic[2] = { 0, 0 };
+    return in.read(reinterpret_cast<char*>(magic), 2) && magic[0] == 0xFF && magic[1] == 0xD8;
+}
+
 } // namespace
 
 bool optimizeScrapedImage(const std::string& path, bool thumbnail)
 {
+    const int maxWidth = thumbnail ? kThumbMaxWidth : kBoxMaxWidth;
+
+    // stbi_info reads only the header (PNG IHDR / JPEG SOF), so a file that is already a JPEG at or
+    // below the target width is left as it is. Re-encoding it would mean a full decode plus encode
+    // on the console for an image that is already the right size — which is what happens when the
+    // source (ScreenScraper with maxwidth, or RomM's small cover) was small to begin with.
+    int infoW = 0;
+    int infoH = 0;
+    if (isJpegFile(path) && stbi_info(path.c_str(), &infoW, &infoH, nullptr) && infoW <= maxWidth) {
+        SF_LOG_I("Scraper", "Optimize skipped (already %dx%d JPEG): %s", infoW, infoH, path.c_str());
+        return true;
+    }
+
     int w = 0;
     int h = 0;
     int channels = 0;
@@ -82,7 +106,6 @@ bool optimizeScrapedImage(const std::string& path, bool thumbnail)
         return false;
     }
 
-    const int maxWidth = thumbnail ? kThumbMaxWidth : kBoxMaxWidth;
     int outW = w;
     int outH = h;
     if (w > maxWidth) {
