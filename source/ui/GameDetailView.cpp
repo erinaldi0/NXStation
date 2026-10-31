@@ -339,12 +339,19 @@ void GameDetailView::refreshUi()
     descLabel->setText(game_.meta.description.empty() ? "No description available."
                                                       : game_.meta.description);
 
-    if (!game_.meta.boxArtPath.empty() && FileSystem::exists(game_.meta.boxArtPath))
+    // The cover is the default image on this page. When a row has no cover on disk the screenshot is
+    // used instead, so the page agrees with the game list, which falls back the same way; only when
+    // neither exists does the box frame show the system placeholder.
+    auto hasArt = [](const std::string& path) { return !path.empty() && FileSystem::exists(path); };
+
+    if (hasArt(game_.meta.boxArtPath))
         aspectBoxArt_->setImageFromFile(game_.meta.boxArtPath);
+    else if (hasArt(game_.meta.logoPath))
+        aspectBoxArt_->setImageFromFile(game_.meta.logoPath);
     else
         aspectBoxArt_->setImageFromRes("img/systems/" + system_.id + ".png");
 
-    if (!game_.meta.logoPath.empty() && FileSystem::exists(game_.meta.logoPath)) {
+    if (hasArt(game_.meta.logoPath)) {
         aspectThumbArt_->setImageFromFile(game_.meta.logoPath);
         thumbFrame->setVisibility(brls::Visibility::VISIBLE);
     } else {

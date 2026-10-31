@@ -45,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Game details showed only the screenshot**: the box frame had no fallback, so a row without a cover on disk showed the system placeholder while the snapshot appeared in the second frame — the game list falls back box↔snapshot (`GameArt::resolveGameListArtPath`), the details page did not. It now uses the snapshot when there is no cover, and the cover still wins when both exist. `AppState::refreshDownloadedRow` re-applies `applyLocalMedia()` to the row it updates, so art written by the RomM job appears without waiting for the next scan: the row previously kept the empty path it had at the previous scan.
 - RomM rows never showed a release date: `metadatum.first_release_date` is a number (epoch **milliseconds** on the merged row), which `jsonStringField` returned empty for. Date fields are now read as numbers and formatted `YYYY-MM-DD`.
 - **State store save**: the atomic rename refused an existing destination, so the pairing token was never persisted after the first run and startup requests answered `HTTP 401`. Affected writes now use `FileSystem::renameFileOverwrite`.
 - **Download progress**: per-file byte progress (percent + file name) instead of a stuck "Starting download" label; B aborts mid-transfer, and re-downloading an existing ROM no longer fails at the rename step.

@@ -430,6 +430,15 @@ bool AppState::refreshDownloadedRow(const std::string& systemId, const GameItem&
             existing.meta.publisher = game.meta.publisher;
         if (existing.meta.releaseDate.empty())
             existing.meta.releaseDate = game.meta.releaseDate;
+
+        // Art is resolved by probing the system's images folder, so a row that was built before the
+        // RomM art job ran keeps the empty path it had at the previous scan even though the cover now
+        // exists. Re-apply the probe for the row that is actually displayed; applyFallbackMedia only
+        // fills what is missing, so repeating it is safe.
+        const std::string stem = FileSystem::stemOf(existing.path.empty() ? existing.filename : existing.path);
+        if (!stem.empty())
+            metaCache_->applyLocalMedia(existing.meta, systemId, stem);
+
         return true;
     }
 
