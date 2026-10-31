@@ -82,6 +82,13 @@ bool RomMLibraryService::loadCache() {
             entry.rom.folderName = item.value("folder_name", std::string());
             entry.rom.fsName = item.value("fs_name", std::string());
             entry.rom.summary = item.value("summary", std::string());
+            // Metadata fields the view reads for cloud rows (RomMClient::parseEntry fills them on a
+            // fetch); without this round-trip every restart loses them and the rows show "—" again.
+            entry.rom.genres = item.value("genres", std::string());
+            entry.rom.developer = item.value("developer", std::string());
+            entry.rom.publisher = item.value("publisher", std::string());
+            entry.rom.releaseDate = item.value("release_date", std::string());
+            entry.rom.coverUrl = item.value("cover_url", std::string());
             entry.rom.coverSmallPath = item.value("cover_small_path", std::string());
             entry.rom.coverLargePath = item.value("cover_large_path", std::string());
             entry.rom.videoPath = item.value("video_path", std::string());
@@ -148,6 +155,11 @@ bool RomMLibraryService::saveCache() const {
         obj["fs_name"] = entry.rom.fsName;
         obj["multi_file"] = entry.rom.multiFile;
         obj["summary"] = entry.rom.summary;
+        obj["genres"] = entry.rom.genres;
+        obj["developer"] = entry.rom.developer;
+        obj["publisher"] = entry.rom.publisher;
+        obj["release_date"] = entry.rom.releaseDate;
+        obj["cover_url"] = entry.rom.coverUrl;
         obj["cover_small_path"] = entry.rom.coverSmallPath;
         obj["cover_large_path"] = entry.rom.coverLargePath;
         obj["video_path"] = entry.rom.videoPath;
