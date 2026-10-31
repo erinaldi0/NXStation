@@ -45,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Home top bar**: the art indicator and the game count sat flush against each other, so during a job they read as one fused string (`Art 598/1252420 games`); the indicator now carries the top bar's usual item gap.
 - **Cached assets answered `HTTP 400`**: RomM's `?ts=` cache-buster is a date-time with a raw space (`?ts=2026-09-25 17:09:03`), and a space in the request line is illegal, so every `assets/romm/resources/...` GET failed — the art job recorded `Box art: Failed` for every entry while the API calls worked fine. The query is now percent-encoded (`sf::url::encodeQuery`) while the path keeps its own segment encoding.
 - **Game details showed only the screenshot**: the box frame had no fallback, so a row without a cover on disk showed the system placeholder while the snapshot appeared in the second frame — the game list falls back box↔snapshot (`GameArt::resolveGameListArtPath`), the details page did not. It now uses the snapshot when there is no cover, and the cover still wins when both exist. `AppState::refreshDownloadedRow` re-applies `applyLocalMedia()` to the row it updates, so art written by the RomM job appears without waiting for the next scan: the row previously kept the empty path it had at the previous scan.
 - RomM rows never showed a release date: `metadatum.first_release_date` is a number (epoch **milliseconds** on the merged row), which `jsonStringField` returned empty for. Date fields are now read as numbers and formatted `YYYY-MM-DD`.

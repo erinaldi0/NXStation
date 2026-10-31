@@ -705,6 +705,9 @@ void DashboardHomeView::buildTopBar()
     artIndicator_->setTextColor(theme.color("nxstation/count_text"));
     artIndicator_->setSingleLine(true);
     artIndicator_->setAnimated(false);
+    // The count label sits right after the indicator on the same row; without a gap the two read
+    // as one string ("Art 598/1252420 games") whenever a job is running.
+    artIndicator_->setMarginRight(tokenChain("topbar_item_gap", "brand_gap", 14.f));
     row->addView(artIndicator_);
 
     auto& queue = sf::romm::RomMService::instance().art();
