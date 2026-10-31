@@ -18,7 +18,7 @@ Built against **devkitA64 / libnx**, **Borealis** (UI), **libcurl**, optional **
 | Playback | Core-direct RetroArch or standalone `.nro` launch (`envSetNextLoad`), hover video preview (FFmpeg), launch zoom/fade |
 | UI | System carousel (Fade / Slide / Crossfade / Zoom / None), list-style system browser, Hide Empty Systems, themes, playtime analytics |
 | Cloud | Google Drive backup/restore for RetroArch saves & states (Settings → Cloud Save) |
-| RomM | Paired RomM server library on the main page (virtual `RomM` system, paginated fetch), download & play, save + state sync at startup / before launch. Settings → RomM Sync: **Sync Now** syncs the ROMs downloaded from the server, and the **Art Fetch** row shows the background job that downloads the covers/snapshots/video/manuals RomM has already cached (one request per asset, no ScreenScraper query for matched ROMs) — `Running — 12/340 · Chrono Cross`, started by **Refresh Library** or by clicking the row, stopped with **Stop Art Fetch**, drained by **Background Workers** (1-4). Progress also appears as a small indicator on the Home/dashboard top bar while a job runs, the pending list persists to `data/romm_art_queue.json` and resumes at the next startup, and the job pauses at a game launch. **Fetch Art for Remote ROMs** covers rows that are not downloaded yet — images only, resolved by the ROM's file name. Covers fetch the small variant first (about 19 KB against about 388 KB for the full-res cover, and the cards draw at 90-160 px), and a file that is already a JPEG at or below the target width is written as downloaded instead of being re-encoded |
+| RomM | Paired RomM server library on the main page (virtual `RomM` system, paginated fetch), download & play, save + state sync at startup / before launch. Settings → RomM Sync: **Sync Now** syncs the ROMs downloaded from the server, and the **Art Fetch** row shows the background job that downloads the covers/snapshots/video/manuals RomM has already cached (one request per asset, no ScreenScraper query for matched ROMs) — `Running — 12/340 · Chrono Cross`, started by **Refresh Library** or by clicking the row, stopped with **Stop Art Fetch**, drained by **Background Workers** (1-4). Progress also appears as a small indicator on the Home/dashboard top bar while a job runs, the pending list persists to `data/romm_art_queue.json` and resumes at the next startup, and the job pauses at a game launch. **Fetch Art for Remote ROMs** covers rows that are not downloaded yet — images only, resolved by the ROM's file name. Covers fetch the small variant first (about 19 KB against about 388 KB for the full-res cover, and the cards draw at 90-160 px), and a file that is already a JPEG at or below the target width is written as downloaded instead of being re-encoded. WebP covers are decoded with libwebp (devkitPro portlib) and written as JPEG, since `stb_image` cannot display WebP |
 | Updates | Settings → **Check for Updates** via [GitHub Releases](https://github.com/jiraiya78/NXStation/releases) |
 | Website | Landing page, user wiki, blog (release notes) in `website/` |
 
@@ -74,6 +74,12 @@ git submodule update --init --recursive
 # optional: nlohmann/json + stb_image for richer decode/parse
 # curl -L -o third_party/nlohmann/json.hpp https://raw.githubusercontent.com/nlohmann/json/v3.11.3/single_include/nlohmann/json.hpp
 # curl -L -o third_party/stb_image.h https://raw.githubusercontent.com/nothings/stb/master/stb_image.h
+```
+
+```bash
+# WebP decoder for scraped covers — the devkitPro portlib, required to build.
+# The devkitA64 Docker image already ships it.
+dkp-pacman -S switch-libwebp
 ```
 
 A built-in `sf::Json` parser is used when nlohmann is absent. Image display still works via Borealis `setImageFromFile`; `stb_image` enables the custom GL LRU uploader.

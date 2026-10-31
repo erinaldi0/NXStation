@@ -70,6 +70,12 @@ Runtime dependencies (not shipped in this repository)
 
   libnx / devkitPro toolchain
   libcurl, mbedTLS — HTTP/TLS (scraper, updater, cloud backup)
+  libwebp — WebP decoding for scraped assets (devkitPro portlib: dkp-pacman -S switch-libwebp).
+    Installed with the devkitA64 image; NXStation uses the decode API only and writes the result as
+    JPEG, since borealis renders images with stb_image, which cannot read WebP.
+    Authors: Google LLC and contributors — https://github.com/webmproject/libwebp
+    License: Apache License 2.0 with an additional patent grant (see upstream COPYING and PATENTS);
+    the devkitPro package lists BSD.
   Optional FFmpeg libraries when video preview is enabled at build time
   Optional MuPDF when PDF manuals are enabled at build time
   RetroArch and libretro cores (each under its own license when installed

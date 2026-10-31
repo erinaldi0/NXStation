@@ -59,7 +59,7 @@ std::string preferJpegUrl(const std::string& url) {
 
 bool decodableImageFormat(const std::string& path) {
     const std::string ext = lowerExtension(path);
-    return ext == ".jpg" || ext == ".jpeg" || ext == ".png";
+    return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".webp";
 }
 
 } // namespace sf

@@ -176,16 +176,14 @@ bool RomMArtFetcher::fetchImageAsset(const std::string& label, const std::string
             continue;
 
         std::string url = client_.assetUrl(path);
-        // stb_image has no WebP decoder. A provider URL usually has a .jpg sibling worth trying;
-        // RomM's own static mount serves the file verbatim — no sibling, no server-side resize — so
-        // a WebP asset there is skipped rather than guessed at, because that guess is a guaranteed
-        // 404 and every wasted round-trip is time the fetcher is being judged on.
-        if (!decodableImageFormat(url)) {
-            if (absoluteUrl(url))
-                url = preferJpegUrl(url);
-            if (!decodableImageFormat(url))
-                continue;
-        }
+        // Formats stb_image cannot decode at all (a .gif or .bmp media) still get their .jpg sibling
+        // tried on the provider. WebP is no longer one of them, because the optimizer transcodes it, and
+        // RomM's own static mount serves the file verbatim — guessing a sibling there was a guaranteed
+        // 404 round-trip per ROM.
+        if (!decodableImageFormat(url) && absoluteUrl(url))
+            url = preferJpegUrl(url);
+        if (!decodableImageFormat(url))
+            continue;
 
         if (downloadTo(url, dest, abort)) {
             ok = true;
@@ -203,9 +201,10 @@ bool RomMArtFetcher::fetchImageAsset(const std::string& label, const std::string
     }
 
     if (ok) {
-        // RomM serves the provider's original file, often larger than the UI needs.
-        if (cfg.scrapeOptimizedMedia())
-            optimizeScrapedImage(dest, thumbnail);
+        // RomM serves the provider's original file, often larger than the UI needs. A WebP file is
+        // transcoded even when that setting is off: stb_image cannot render it, so a WebP left as
+        // downloaded would be an asset no view can display.
+        finalizeScrapedImage(dest, thumbnail, cfg.scrapeOptimizedMedia());
         if (viaRomM)
             ++result.fromRomM;
         else
@@ -316,8 +315,8 @@ ArtFetchResult RomMArtFetcher::fetchEntryArt(const LibraryEntry& entry, sf::Scra
     // Small cover first. It averages ~19 KB against ~388 KB for the big one, and the theme draws the
     // box at card_image_height/card_width (about 90-160 px) up to the Focus height of ~190 px, so the
     // small cover — ~190 px wide on average — is already at or above the size the UI draws. The big
-    // cover is still the fallback for the 10 in 12 ROMs whose small cover is WebP-only, which
-    // stb_image cannot decode.
+    // cover is now only the fallback for entries that have no small cover at all: libwebp handles the
+    // WebP smalls that used to be unusable.
     if (cfg.scrapeBoxArt()) {
         fetchImageAsset("Box art", boxDest, {entry.rom.coverSmallPath, entry.rom.coverLargePath},
                         entry.rom.coverUrl, false, progress, onProgress, abort, result);

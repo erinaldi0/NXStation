@@ -1108,9 +1108,7 @@ GameMetadata ScraperService::scrapeBlocking(const GameItem& game, const SystemCo
 
         if (ok) {
 
-            if (cfg.scrapeOptimizedMedia())
-
-                optimizeScrapedImage(dest, false);
+            finalizeScrapedImage(dest, false, cfg.scrapeOptimizedMedia());
 
             meta.boxArtPath = dest;
 
@@ -1140,9 +1138,7 @@ GameMetadata ScraperService::scrapeBlocking(const GameItem& game, const SystemCo
 
         if (ok) {
 
-            if (cfg.scrapeOptimizedMedia())
-
-                optimizeScrapedImage(dest, true);
+            finalizeScrapedImage(dest, true, cfg.scrapeOptimizedMedia());
 
             meta.logoPath = dest;
 

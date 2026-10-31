@@ -145,6 +145,32 @@ elseif (PLATFORM_DESKTOP)
     endif ()
 endif ()
 
+# WebP decoder: the devkitPro portlib switch-libwebp on Switch, the system libwebp on desktop.
+# stb_image cannot decode WebP, so scraped assets are transcoded to JPEG at fetch time with this
+# (see source/scraper/WebpDecoder.cpp). libm is appended after it because the decoder's gamma tables
+# use pow/log/expf, and a static library is resolved by the libraries listed after it.
+find_package(PkgConfig)
+if (PkgConfig_FOUND)
+    pkg_check_modules(WEBP libwebp)
+endif ()
+if (NOT WEBP_FOUND)
+    find_path(WEBP_INCLUDE_DIR webp/decode.h PATHS ${DEVKITPRO}/portlibs/switch/include NO_DEFAULT_PATH)
+    find_library(WEBP_LIBRARY webp PATHS ${DEVKITPRO}/portlibs/switch/lib NO_DEFAULT_PATH)
+    if (WEBP_INCLUDE_DIR AND WEBP_LIBRARY)
+        set(WEBP_FOUND TRUE)
+        set(WEBP_LIBRARIES ${WEBP_LIBRARY})
+        set(WEBP_INCLUDE_DIRS ${WEBP_INCLUDE_DIR})
+    endif ()
+endif ()
+if (NOT WEBP_FOUND)
+    message(FATAL_ERROR
+        "libwebp is required for WebP decoding. Switch: dkp-pacman -S switch-libwebp. "
+        "Desktop: install the libwebp development package (pkg-config name 'libwebp').")
+endif ()
+
+list(APPEND APP_PLATFORM_LIB ${WEBP_LIBRARIES} m)
+list(APPEND APP_PLATFORM_INCLUDE ${WEBP_INCLUDE_DIRS})
+
 program_target(${PROJECT_NAME} "${MAIN_SRC}")
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 23)
 

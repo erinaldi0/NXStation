@@ -1,4 +1,5 @@
 #include "scraper/ImageOptimizer.hpp"
+#include "scraper/WebpDecoder.hpp"
 
 #include "util/Logger.hpp"
 
@@ -78,11 +79,53 @@ bool isJpegFile(const std::string& path) {
     return in.read(reinterpret_cast<char*>(magic), 2) && magic[0] == 0xFF && magic[1] == 0xD8;
 }
 
+/** Resize to the target width when needed, then write the JPEG in place. `rgb` is RGB24. */
+bool writeResizedJpeg(const std::string& path, const std::vector<uint8_t>& rgb, int w, int h,
+                      int maxWidth, int quality)
+{
+    int outW = w;
+    int outH = h;
+    if (w > maxWidth) {
+        outW = maxWidth;
+        outH = std::max(1, static_cast<int>(std::lround(static_cast<double>(h) * maxWidth / w)));
+    }
+
+    std::vector<uint8_t> buffer;
+    const uint8_t* source = rgb.data();
+    if (outW != w || outH != h) {
+        buffer.resize(static_cast<size_t>(outW) * static_cast<size_t>(outH) * 3);
+        resizeBilinear(rgb.data(), w, h, 3, buffer.data(), outW, outH);
+        source = buffer.data();
+    }
+
+    if (!stbi_write_jpg(path.c_str(), outW, outH, 3, source, quality)) {
+        SF_LOG_W("Scraper", "Optimize write failed: %s", path.c_str());
+        return false;
+    }
+
+    SF_LOG_I("Scraper", "Optimized %s (%dx%d q=%d)", path.c_str(), outW, outH, quality);
+    return true;
+}
+
 } // namespace
 
 bool optimizeScrapedImage(const std::string& path, bool thumbnail)
 {
     const int maxWidth = thumbnail ? kThumbMaxWidth : kBoxMaxWidth;
+    const int quality = thumbnail ? kThumbJpegQuality : kBoxJpegQuality;
+
+    // WebP is checked before anything else because stb_image cannot decode it at all, so an asset
+    // stored as WebP has to become a JPEG on disk before any view can draw it. This is what makes
+    // RomM's small cover usable: about 19 KB of WebP instead of the ~388 KB big cover, for the ROMs
+    // whose small cover is WebP.
+    if (isWebpFile(path)) {
+        int w = 0;
+        int h = 0;
+        std::vector<uint8_t> rgb;
+        if (!decodeWebpToRgb(path, w, h, rgb))
+            return false;
+        return writeResizedJpeg(path, rgb, w, h, maxWidth, quality);
+    }
 
     // stbi_info reads only the header (PNG IHDR / JPEG SOF), so a file that is already a JPEG at or
     // below the target width is left as it is. Re-encoding it would mean a full decode plus encode
@@ -106,34 +149,18 @@ bool optimizeScrapedImage(const std::string& path, bool thumbnail)
         return false;
     }
 
-    int outW = w;
-    int outH = h;
-    if (w > maxWidth) {
-        outW = maxWidth;
-        outH = std::max(1, static_cast<int>(std::lround(static_cast<double>(h) * maxWidth / w)));
-    }
-
-    std::vector<uint8_t> resized;
-    const uint8_t* source = pixels;
-    if (outW != w || outH != h) {
-        resized.resize(static_cast<size_t>(outW) * static_cast<size_t>(outH) * channels);
-        resizeBilinear(pixels, w, h, channels, resized.data(), outW, outH);
-        source = resized.data();
-    }
-
-    const std::vector<uint8_t> rgb = toRgb(source, outW, outH, channels);
-    const int quality = thumbnail ? kThumbJpegQuality : kBoxJpegQuality;
-    const int ok = stbi_write_jpg(path.c_str(), outW, outH, 3, rgb.data(), quality);
-
+    const std::vector<uint8_t> rgb = toRgb(pixels, w, h, channels);
     stbi_image_free(pixels);
 
-    if (!ok) {
-        SF_LOG_W("Scraper", "Optimize write failed: %s", path.c_str());
-        return false;
-    }
+    return writeResizedJpeg(path, rgb, w, h, maxWidth, quality);
+}
 
-    SF_LOG_I("Scraper", "Optimized %s (%dx%d q=%d)", path.c_str(), outW, outH, quality);
-    return true;
+bool finalizeScrapedImage(const std::string& path, bool thumbnail, bool optimize)
+{
+    if (!optimize && !isWebpFile(path))
+        return true;
+
+    return optimizeScrapedImage(path, thumbnail);
 }
 
 } // namespace sf
