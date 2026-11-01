@@ -55,10 +55,16 @@ bool RomMService::initialize(const RomMConfig& config) {
     // Load persisted state
     store_->load();
 
+    // Pairing stores the device id in the state store, not in settings.json, so a restarted app
+    // has the tokens but no device id. RomM rejects every sync call without one, so recover it here.
+    if (config_.deviceId.empty() && !store_->deviceId().empty())
+        config_.deviceId = store_->deviceId();
+
     // Restore tokens from state store
     if (!store_->accessToken().empty()) {
         client_.configure(config_.serverUrl, store_->accessToken(), store_->clientToken());
     }
+    client_.setDeviceId(config_.deviceId);
 
     enabled_ = config_.enabled && !config_.serverUrl.empty();
     initialized_ = true;
@@ -95,6 +101,12 @@ void RomMService::refreshConfig() {
     config_.artForRemoteRoms = latestConfig.artForRemoteRoms;
     config_.artWorkers = latestConfig.artWorkers;
     
+    // The device id is not part of settings.json; it belongs to the pairing stored in the state
+    // store, so fall back to it whenever the in-memory config lost it.
+    if (config_.deviceId.empty() && store_ && !store_->deviceId().empty())
+        config_.deviceId = store_->deviceId();
+    client_.setDeviceId(config_.deviceId);
+
     // Update enabled state
     enabled_ = config_.enabled && !config_.serverUrl.empty();
     
@@ -128,6 +140,21 @@ bool RomMService::ensureAuthenticated(std::string& errorOut) {
     if (!client_.isReady()) {
         errorOut = "RomM not configured or authenticated";
         return false;
+    }
+
+    // RomM identifies sync calls by device_id. A plain API token is not device-bound, so the app
+    // must own a device row before it can negotiate; register it once and keep the id.
+    if (config_.deviceId.empty()) {
+        Device device;
+        if (!client_.registerDevice(config_.deviceName.empty() ? "NXStation" : config_.deviceName, device)) {
+            errorOut = client_.lastError();
+            return false;
+        }
+        config_.deviceId = device.id;
+        store_->setDeviceId(device.id);
+        store_->save();
+        client_.setDeviceId(device.id);
+        SF_LOG_I("RomM", "Registered device: %s", device.id.c_str());
     }
 
     // Check token expiration

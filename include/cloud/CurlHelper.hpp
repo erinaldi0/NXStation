@@ -5,6 +5,7 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 #include <cstdint>
 
@@ -47,6 +48,14 @@ public:
 
     CurlResponse get(const std::string& url);
     CurlResponse postForm(const std::string& url, const std::string& formBody);
+    /**
+     * multipart/form-data POST. FastAPI reads an uploaded file only from a multipart body, so
+     * postForm()'s url-encoded body cannot carry one: the file becomes its own part and the
+     * metadata the string parts.
+     */
+    CurlResponse postMultipart(const std::string& url,
+                               const std::vector<std::pair<std::string, std::string>>& fields,
+                               const std::string& fileField, const std::string& filePath);
     CurlResponse postJson(const std::string& url, const std::string& jsonBody);
   CurlResponse postJsonCaptureHeaders(const std::string& url, const std::string& jsonBody);
     CurlResponse patchCaptureHeaders(const std::string& url);

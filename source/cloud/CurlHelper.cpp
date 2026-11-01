@@ -29,6 +29,19 @@ std::string trimHeaderLine(std::string line)
     return line;
 }
 
+/**
+ * Transient transfer failures: handle-level init/connection problems, a connection dropped
+ * mid-request, and CURLE_BAD_FUNCTION_ARGUMENT, which is how easy.c maps an internal multi-state
+ * error (the easy API runs every perform through a persistent internal multi handle, so a retry on
+ * the same handle inherits the bad state and only a fresh handle clears it).
+ */
+bool transientCode(CURLcode code)
+{
+    return code == CURLE_FAILED_INIT || code == CURLE_COULDNT_CONNECT
+        || code == CURLE_SEND_ERROR || code == CURLE_RECV_ERROR
+        || code == CURLE_BAD_FUNCTION_ARGUMENT;
+}
+
 } // namespace
 
 CurlHelper::CurlHelper()
@@ -217,16 +230,9 @@ CurlResponse CurlHelper::perform(const char* method, const std::string& url, con
 
     CURLcode code = attempt();
 
-    // Handle-level init/connection failures on Switch are usually transient; one retry
-    // with a fresh handle recovers without the caller noticing. The send/receive errors cover a
-    // connection dropped mid-request, and CURLE_BAD_FUNCTION_ARGUMENT is how easy.c maps an
-    // internal multi-state error: the easy API runs every perform through a persistent internal
-    // multi handle, so a fresh handle is what clears the bad state a retry on the same one would
-    // inherit.
-    const bool retryable = code == CURLE_FAILED_INIT || code == CURLE_COULDNT_CONNECT
-                           || code == CURLE_SEND_ERROR || code == CURLE_RECV_ERROR
-                           || code == CURLE_BAD_FUNCTION_ARGUMENT;
-    if (retryable) {
+    // Transient failures on Switch are usually one-off; one retry with a fresh handle recovers
+    // without the caller noticing (see transientCode above).
+    if (transientCode(code)) {
         curl_easy_cleanup(curl_);
         curl_ = curl_easy_init();
         if (curl_)
@@ -255,6 +261,81 @@ CurlResponse CurlHelper::get(const std::string& url)
 CurlResponse CurlHelper::postForm(const std::string& url, const std::string& formBody)
 {
     return perform("POST", url, &formBody, false, false, nullptr);
+}
+
+CurlResponse CurlHelper::postMultipart(const std::string& url,
+                                       const std::vector<std::pair<std::string, std::string>>& fields,
+                                       const std::string& fileField, const std::string& filePath)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    CurlResponse resp;
+    if (!ensureHandle()) {
+        resp.error = "curl not initialized";
+        return resp;
+    }
+
+    std::string responseBody;
+
+    const auto attempt = [&](void) -> CURLcode {
+        responseBody.clear();
+
+        reset();
+        curl_slist* hdr = nullptr;
+        if (!authHeader_.empty())
+            hdr = curl_slist_append(hdr, authHeader_.c_str());
+
+        curl_mime* mime = curl_mime_init(curl_);
+        if (!mime) {
+            if (hdr)
+                curl_slist_free_all(hdr);
+            return CURLE_OUT_OF_MEMORY;
+        }
+
+        for (const auto& field : fields) {
+            curl_mimepart* part = curl_mime_addpart(mime);
+            curl_mime_name(part, field.first.c_str());
+            curl_mime_data(part, field.second.c_str(), field.second.size());
+        }
+
+        curl_mimepart* filePart = curl_mime_addpart(mime);
+        curl_mime_name(filePart, fileField.c_str());
+        // filedata also sets the part's filename from the path, which is what the server records.
+        curl_mime_filedata(filePart, filePath.c_str());
+
+        curl_easy_setopt(curl_, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, &CurlHelper::writeBody);
+        curl_easy_setopt(curl_, CURLOPT_WRITEDATA, &responseBody);
+        if (hdr)
+            curl_easy_setopt(curl_, CURLOPT_HTTPHEADER, hdr);
+        curl_easy_setopt(curl_, CURLOPT_MIMEPOST, mime);
+
+        const CURLcode code = curl_easy_perform(curl_);
+        curl_mime_free(mime);
+        if (hdr)
+            curl_slist_free_all(hdr);
+        return code;
+    };
+
+    CURLcode code = attempt();
+    if (transientCode(code)) {
+        curl_easy_cleanup(curl_);
+        curl_ = curl_easy_init();
+        if (curl_)
+            code = attempt();
+    }
+
+    resp.body = std::move(responseBody);
+    if (code != CURLE_OK) {
+        resp.error = curl_easy_strerror(code);
+        return resp;
+    }
+
+    curl_easy_getinfo(curl_, CURLINFO_RESPONSE_CODE, &resp.status);
+    resp.ok = resp.status >= 200 && resp.status < 300;
+    if (!resp.ok && resp.error.empty())
+        resp.error = "HTTP " + std::to_string(resp.status);
+    return resp;
 }
 
 CurlResponse CurlHelper::postJson(const std::string& url, const std::string& jsonBody)

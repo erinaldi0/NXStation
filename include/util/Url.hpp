@@ -32,6 +32,27 @@ inline std::string encodeQuery(const std::string& value) {
     return out;
 }
 
+/**
+ * Percent-encode one query value. Unlike encodeQuery this also encodes the structural characters,
+ * so a value containing `&`, `=` or `+` (a slot name, a file name) cannot be read as part of the
+ * query.
+ */
+inline std::string encodeQueryValue(const std::string& value) {
+    static const char* safe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+    std::string out;
+    out.reserve(value.size());
+    for (unsigned char c : value) {
+        if (strchr(safe, c)) {
+            out.push_back(static_cast<char>(c));
+        } else {
+            out += "%";
+            out += "0123456789ABCDEF"[(c >> 4) & 0xF];
+            out += "0123456789ABCDEF"[c & 0xF];
+        }
+    }
+    return out;
+}
+
 inline std::string encodePathSegment(const std::string& value) {
     static const char* safe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
     std::string out;

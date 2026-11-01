@@ -20,19 +20,31 @@ struct Device {
     std::string lastSeen;
 };
 
-/** Represents a save file or state in RomM. */
+/**
+ * A save file or state, both as the client reports it during negotiate and as the server's
+ * operation refers to it. The same shape is used in both directions.
+ */
 struct RomMSave {
-    std::string id;
+    std::string id;            // Server save id; empty for upload and delete operations
     std::string romId;
     std::string slot;
     std::string deviceId;
     std::string sessionId;
+    /** content_hash: this client's file hash when sending, the server's when parsing. */
     std::string hash;
     int64_t size = 0;
     std::string type;      // "save" or "state"
     std::string coreId;    // For save states
+    /** file_name as the server stores it; needed to find the local file for a download. */
+    std::string fileName;
+    /** Negotiate operation: upload, download, conflict, delete, no_op. */
+    std::string action;
+    std::string reason;
+    /** The local file this entry refers to; empty for an operation the server describes. */
+    std::string localPath;
+    /** Client mtime when sending, server updated_at when parsing (epoch seconds). */
+    time_t updatedAt = 0;
     std::string createdAt;
-    std::string updatedAt;
 };
 
 /** One file of a ROM, as returned by RomM's RomFileSchema. */
@@ -97,13 +109,15 @@ struct PairingResponse {
     time_t expiresAt = 0;
 };
 
-/** Sync negotiation response. */
+/** Sync negotiation response: the session plus the operations the client must perform. */
 struct NegotiateResponse {
     std::string sessionId;
-    std::vector<RomMSave> uploads;     // Saves to upload
-    std::vector<RomMSave> downloads;   // Saves to download
-    std::vector<RomMSave> conflicts;   // Conflicts requiring resolution
-    std::vector<RomMSave> deletes;     // Saves to delete locally
+    std::vector<RomMSave> operations;
+    size_t totalUpload = 0;
+    size_t totalDownload = 0;
+    size_t totalConflict = 0;
+    size_t totalDelete = 0;
+    size_t totalNoOp = 0;
 };
 
 /** Upload save response. */
@@ -143,14 +157,20 @@ public:
     bool registerDevice(const std::string& deviceName, Device& out);
     bool updateDevice(const std::string& deviceId, const std::string& name);
 
+    /**
+     * Device id the sync calls carry: RomM takes it at the top level of negotiate (a device-bound
+     * token is the only way to omit it) and as a query parameter on the save endpoints, so it is
+     * set here once the device is registered rather than per save.
+     */
+    void setDeviceId(const std::string& deviceId) { deviceId_ = deviceId; }
+
     // Save Sync Protocol
     bool negotiate(const std::vector<RomMSave>& localSaves, NegotiateResponse& out);
     bool uploadSave(const std::string& localPath, const RomMSave& meta, UploadResponse& out);
-    bool downloadSave(const std::string& saveId, const std::string& localPath);
-    bool confirmDownload(const std::string& saveId, const std::string& hash);
+    bool downloadSave(const std::string& saveId, const std::string& localPath,
+                      const std::string& sessionId = "");
     bool completeSyncSession(const std::string& sessionId,
-                             const std::vector<std::string>& completed,
-                             const std::vector<std::string>& failed);
+                             size_t operationsCompleted, size_t operationsFailed);
 
     // Library API
     bool fetchLibrary(std::vector<RomMLibraryEntry>& out,
@@ -185,12 +205,15 @@ private:
     std::string baseUrl_;
     std::string accessToken_;
     std::string clientToken_;
+    std::string deviceId_;
     bool ready_ = false;
     mutable std::string lastError_;
 
     std::string buildUrl(const std::string& path) const;
     void updateAuthHeaders();
     bool checkResponse(const sf::cloud::CurlResponse& resp, const char* operation);
+    /** FastAPI answers a 4xx with {"detail": "..."}; without it the user only sees a status code. */
+    static std::string errorDetail(const std::string& body);
 };
 
 } // namespace sf::romm

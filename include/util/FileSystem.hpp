@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <ctime>
 #include <functional>
 #include <string>
 #include <vector>
@@ -20,6 +21,8 @@ struct DirEntry {
     std::string path;
     bool isDirectory = false;
     uint64_t size = 0;
+    /** Last-modified time in epoch seconds; 0 when the platform reports no mtime. */
+    time_t modifiedTime = 0;
 };
 
 class FileSystem {

@@ -204,7 +204,7 @@ std::vector<LocalSaveFile> RomMSaveMapper::discoverSaves(const std::string& romP
             save.coreId = "";
             save.hash = computeHash(entry.path);
             save.size = static_cast<int64_t>(entry.size);
-            save.modifiedTime = 0; // FileSystem doesn't provide modifiedTime
+            save.modifiedTime = entry.modifiedTime;
             saves.push_back(std::move(save));
         }
     }
@@ -224,7 +224,7 @@ std::vector<LocalSaveFile> RomMSaveMapper::discoverSaves(const std::string& romP
             save.coreId = coreIdFromStateFile(entry.name).empty() ? coreId : coreIdFromStateFile(entry.name);
             save.hash = computeHash(entry.path);
             save.size = static_cast<int64_t>(entry.size);
-            save.modifiedTime = 0;
+            save.modifiedTime = entry.modifiedTime;
             saves.push_back(std::move(save));
         }
     }
@@ -245,7 +245,7 @@ std::vector<LocalSaveFile> RomMSaveMapper::discoverSaves(const std::string& romP
             save.coreId = save.type == "state" ? coreId : "";
             save.hash = computeHash(entry.path);
             save.size = static_cast<int64_t>(entry.size);
-            save.modifiedTime = 0;
+            save.modifiedTime = entry.modifiedTime;
             saves.push_back(std::move(save));
         }
     }
@@ -269,17 +269,30 @@ std::optional<std::string> RomMSaveMapper::resolveLocalPath(const RomMSave& save
 
         // Check central saves/states
         const auto roots = sf::cloud::discoverRetroArchSaveRoots();
-        std::string baseDir = save.type == "state" ? roots.statesDir : roots.savesDir;
-        std::string expectedName = mapping.displayName + "." + save.slot;
-        if (save.type == "state") expectedName += ".state";
 
-        std::string candidate = FileSystem::join(baseDir, expectedName);
-        if (FileSystem::exists(candidate)) return candidate;
+        // Negotiate gives the name the server stores, which for a slotted save carries its version
+        // tag and is not the name the emulator wrote, so try it first and then this app's own
+        // display-name convention.
+        std::vector<std::string> names;
+        if (!save.fileName.empty()) names.push_back(save.fileName);
+        const std::string slot = save.slot.empty() ? "0" : save.slot;
+        names.push_back(mapping.displayName + "." + slot);
 
-        // Check ROM-folder sidecar
-        const std::string romDir = FileSystem::parentPath(mapping.romPath);
-        candidate = FileSystem::join(romDir, expectedName);
-        if (FileSystem::exists(candidate)) return candidate;
+        const bool state = save.type == "state" || isStateFile(save.fileName);
+        if (state) names.push_back(mapping.displayName + ".state");
+
+        const std::vector<std::string> dirs = {
+            state ? roots.statesDir : roots.savesDir,
+            FileSystem::parentPath(mapping.romPath)
+        };
+
+        for (const auto& dir : dirs) {
+            if (dir.empty() || !FileSystem::exists(dir)) continue;
+            for (const auto& name : names) {
+                const std::string candidate = FileSystem::join(dir, name);
+                if (FileSystem::exists(candidate)) return candidate;
+            }
+        }
     }
     return std::nullopt;
 }

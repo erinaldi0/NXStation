@@ -8,9 +8,20 @@
 #include "util/Hash.hpp"
 
 #include <algorithm>
+#include <fstream>
 #include <borealis.hpp>
 
 namespace sf::romm {
+
+namespace {
+
+/** "save (slot)" / "state (slot)" for the progress line. */
+std::string describeOperation(const RomMSave& op) {
+    const std::string kind = RomMSaveMapper::isStateFile(op.fileName) ? "state" : "save";
+    return kind + " (" + (op.slot.empty() ? "no slot" : op.slot) + ")";
+}
+
+} // namespace
 
 RomMSyncEngine::RomMSyncEngine(RomMClient& client, RomMSaveMapper& mapper, RomMStateStore& store,
                                const RomMConfig& config)
@@ -44,6 +55,11 @@ bool RomMSyncEngine::syncAll(SyncDetailedCallback progress, std::atomic<bool>* a
 
     // Sync every mapped ROM
     const auto mappings = mapper_.allMappings();
+    if (config_.deviceId.empty()) {
+        syncInProgress_.store(false);
+        lastResult_ = "RomM is not paired (no device id)";
+        return false;
+    }
     if (mappings.empty()) {
         syncInProgress_.store(false);
         lastResult_ = "Nothing to sync yet — download a ROM from the RomM library first";
@@ -109,6 +125,16 @@ bool RomMSyncEngine::runSyncForRom(SyncContext& ctx) {
     }
     ctx.rommRomId = mappingOpt->rommRomId;
 
+    // RomM identifies the caller by device_id — negotiate takes it at the top level of the payload
+    // and the save endpoints as a query parameter. Without it the server answers 400 for every ROM,
+    // so refuse before sending anything rather than failing once per game.
+    if (config_.deviceId.empty()) {
+        lastResult_ = "RomM is not paired (no device id)";
+        emitProgress(ctx, SyncDetailedProgress::Stage::Error, lastResult_);
+        return false;
+    }
+    client_.setDeviceId(config_.deviceId);
+
     // Collect local files
     emitProgress(ctx, SyncDetailedProgress::Stage::Negotiating, "Scanning local saves…");
     if (!collectLocalFiles(ctx)) return false;
@@ -117,41 +143,79 @@ bool RomMSyncEngine::runSyncForRom(SyncContext& ctx) {
     emitProgress(ctx, SyncDetailedProgress::Stage::Negotiating, "Negotiating with server…");
     if (!negotiate(ctx)) return false;
 
-    // Handle downloads
-    if (!ctx.negotiateResp.downloads.empty()) {
-        emitProgress(ctx, SyncDetailedProgress::Stage::Downloading, "Downloading saves…");
-        if (!handleDownloads(ctx)) return false;
-    }
+    size_t completed = 0;
+    size_t failed = 0;
+    size_t processed = 0;
+    const size_t total = ctx.negotiateResp.operations.size();
 
-    // Handle uploads
-    if (!ctx.negotiateResp.uploads.empty()) {
-        emitProgress(ctx, SyncDetailedProgress::Stage::Uploading, "Uploading saves…");
-        if (!handleUploads(ctx)) return false;
-    }
+    // One pass over the operations the server planned. The session is closed with counts rather than
+    // with the ids of what was done, so the engine counts as it goes.
+    for (const auto& op : ctx.negotiateResp.operations) {
+        if (ctx.abort && ctx.abort->load()) break;
 
-    // Handle conflicts
-    if (!ctx.negotiateResp.conflicts.empty()) {
-        emitProgress(ctx, SyncDetailedProgress::Stage::ResolvingConflicts, "Resolving conflicts…");
-        if (!handleConflicts(ctx)) return false;
-    }
+        if (op.action == "no_op") {
+            ++processed;
+            continue;
+        }
 
-    // Handle deletes
-    if (!ctx.negotiateResp.deletes.empty()) {
-        emitProgress(ctx, SyncDetailedProgress::Stage::ResolvingConflicts, "Processing deletions…");
-        if (!handleDeletes(ctx)) return false;
+        bool ok = false;
+        if (op.action == "upload") {
+            emitProgress(ctx, SyncDetailedProgress::Stage::Uploading, "Uploading " + describeOperation(op),
+                         op.fileName, -1, processed, total);
+            ok = performUpload(ctx, op);
+        } else if (op.action == "download") {
+            emitProgress(ctx, SyncDetailedProgress::Stage::Downloading, "Downloading " + describeOperation(op),
+                         op.fileName, -1, processed, total);
+            ok = performDownload(ctx, op);
+        } else if (op.action == "conflict") {
+            // Both sides changed since the last sync, so the server leaves the choice to the policy.
+            emitProgress(ctx, SyncDetailedProgress::Stage::ResolvingConflicts, op.reason,
+                         op.fileName, -1, processed, total);
+            if (config_.conflictPolicy == ConflictPolicy::KeepLocal)
+                ok = performUpload(ctx, op);
+            else if (config_.conflictPolicy == ConflictPolicy::Ask)
+                ok = true;  // Acknowledged only; nothing on either side is changed.
+            else
+                ok = performDownload(ctx, op);  // KeepRemote / KeepBoth (archived inside)
+        } else if (op.action == "delete") {
+            emitProgress(ctx, SyncDetailedProgress::Stage::ResolvingConflicts, "Processing deletion",
+                         op.fileName, -1, processed, total);
+            ok = performDelete(ctx, op);
+        } else {
+            SF_LOG_W("RomM", "Unknown sync action: %s", op.action.c_str());
+            ++processed;
+            continue;
+        }
+
+        if (ok)
+            ++completed;
+        else
+            ++failed;
+        ++processed;
     }
 
     // Complete session
     emitProgress(ctx, SyncDetailedProgress::Stage::Completing, "Finalizing sync…");
-    if (!completeSession(ctx)) return false;
+    // Not fatal: a session the server already closed, or one its cleanup expired, answers 400, and
+    // the counts are still worth reporting.
+    if (!client_.completeSyncSession(ctx.negotiateResp.sessionId, completed, failed))
+        SF_LOG_W("RomM", "Could not complete sync session: %s", client_.lastError().c_str());
+
+    store_.setLastSessionId(ctx.negotiateResp.sessionId);
+    store_.clearPendingOperations();
 
     // Update state store
     store_.setLastSuccessfulSync(std::time(nullptr));
+
+    lastResult_ = "Synced " + std::to_string(completed) + " of " + std::to_string(total) + " operation(s)";
+    if (failed > 0)
+        lastResult_ += " (" + std::to_string(failed) + " failed)";
+
     store_.setLastSyncResult(lastResult_);
     store_.save();
 
     emitProgress(ctx, SyncDetailedProgress::Stage::Done, "Sync complete", lastResult_, 100);
-    return true;
+    return failed == 0;
 }
 
 bool RomMSyncEngine::collectLocalFiles(SyncContext& ctx) {
@@ -171,6 +235,12 @@ bool RomMSyncEngine::collectLocalFiles(SyncContext& ctx) {
         save.hash = local.hash;
         save.size = local.size;
         save.coreId = local.coreId;
+        save.localPath = local.localPath;
+        // The two fields negotiate requires besides the hash: the name as it sits on disk, and its
+        // mtime (RomM pairs a slot by which side is newer, so a zero timestamp makes every
+        // comparison the server's win).
+        save.fileName = FileSystem::filenameOf(local.localPath);
+        save.updatedAt = local.modifiedTime;
         ctx.localSaves.push_back(std::move(save));
     }
 
@@ -201,216 +271,159 @@ bool RomMSyncEngine::negotiate(SyncContext& ctx) {
         return false;
     }
 
-    SF_LOG_I("RomM", "Negotiation: %zu uploads, %zu downloads, %zu conflicts, %zu deletes",
-             ctx.negotiateResp.uploads.size(), ctx.negotiateResp.downloads.size(),
-             ctx.negotiateResp.conflicts.size(), ctx.negotiateResp.deletes.size());
+    SF_LOG_I("RomM", "Negotiation: %zu upload(s), %zu download(s), %zu conflict(s), %zu delete(s), %zu no-op",
+             ctx.negotiateResp.totalUpload, ctx.negotiateResp.totalDownload,
+             ctx.negotiateResp.totalConflict, ctx.negotiateResp.totalDelete,
+             ctx.negotiateResp.totalNoOp);
     return true;
 }
 
-bool RomMSyncEngine::handleDownloads(SyncContext& ctx) {
-    if (ctx.abort && ctx.abort->load()) return false;
-
-    size_t total = ctx.negotiateResp.downloads.size();
-    size_t completed = 0;
-    std::vector<std::string> completedIds;
-    std::vector<std::string> failedIds;
-
-    for (const auto& save : ctx.negotiateResp.downloads) {
-        if (ctx.abort && ctx.abort->load()) break;
-
-        emitProgress(ctx, SyncDetailedProgress::Stage::Downloading,
-                     "Downloading " + save.type + " (" + save.slot + ")",
-                     save.id, -1, completed, total);
-
-        auto localPathOpt = mapper_.resolveLocalPath(save);
-        if (!localPathOpt) {
-            SF_LOG_W("RomM", "Cannot resolve local path for save %s", save.id.c_str());
-            failedIds.push_back(save.id);
-            continue;
-        }
-
-        const std::string localPath = *localPathOpt;
-        const std::string tempPath = localPath + ".romm_download";
-
-        // Download to temp file
-        if (!client_.downloadSave(save.id, tempPath)) {
-            SF_LOG_E("RomM", "Failed to download save %s: %s", save.id.c_str(), client_.lastError().c_str());
-            failedIds.push_back(save.id);
-            continue;
-        }
-
-        // Verify hash
-        const std::string downloadedHash = computeFileHash(tempPath);
-        if (downloadedHash != save.hash) {
-            SF_LOG_E("RomM", "Hash mismatch for save %s: expected %s, got %s",
-                     save.id.c_str(), save.hash.c_str(), downloadedHash.c_str());
-            FileSystem::removeFile(tempPath);
-            failedIds.push_back(save.id);
-            continue;
-        }
-
-        // Handle conflict policy
-        if (FileSystem::exists(localPath)) {
-            const std::string localHash = computeFileHash(localPath);
-            if (localHash != save.hash) {
-                // Conflict!
-                if (config_.conflictPolicy == ConflictPolicy::KeepBoth) {
-                    // Archive local copy
-                    std::string backupPath = localPath + ".conflict_" + std::to_string(std::time(nullptr));
-                    if (FileSystem::renameFile(localPath, backupPath)) {
-                        store_.recordConflictBackup(localPath, backupPath);
-                        SF_LOG_I("RomM", "Archived conflicting local save to %s", backupPath.c_str());
-                    }
-                } else if (config_.conflictPolicy == ConflictPolicy::KeepLocal) {
-                    SF_LOG_I("RomM", "Keeping local save (conflict policy: keep_local)");
-                    FileSystem::removeFile(tempPath);
-                    failedIds.push_back(save.id);
-                    continue;
-                }
-                // KeepRemote: overwrite (default)
-            }
-        }
-
-        // Atomic replace
-        if (!writeFileAtomic(localPath, tempPath)) {
-            SF_LOG_E("RomM", "Failed to write save file %s", localPath.c_str());
-            failedIds.push_back(save.id);
-            continue;
-        }
-
-        // Update fingerprint
-        FileFingerprint fp;
-        fp.hash = downloadedHash;
-        fp.size = save.size;
-        fp.modifiedTime = std::time(nullptr);
-        fp.rommSaveId = save.id;
-        store_.setFingerprint(localPath, fp);
-
-        // Confirm download
-        if (!client_.confirmDownload(save.id, downloadedHash)) {
-            SF_LOG_W("RomM", "Failed to confirm download for %s", save.id.c_str());
-        }
-
-        completedIds.push_back(save.id);
-        ++completed;
+bool RomMSyncEngine::performDownload(SyncContext& ctx, const RomMSave& op) {
+    auto localPathOpt = mapper_.resolveLocalPath(op);
+    if (!localPathOpt) {
+        SF_LOG_W("RomM", "Cannot resolve local path for %s", op.fileName.c_str());
+        return false;
     }
 
-    lastResult_ = "Downloaded " + std::to_string(completed) + " save(s)";
-    if (!failedIds.empty()) {
-        lastResult_ += ", " + std::to_string(failedIds.size()) + " failed";
+    const std::string localPath = *localPathOpt;
+    const std::string tempPath = localPath + ".romm_download";
+
+    // Download to a temp file, then replace atomically.
+    if (!client_.downloadSave(op.id, tempPath, ctx.negotiateResp.sessionId)) {
+        SF_LOG_E("RomM", "Failed to download %s: %s", op.fileName.c_str(), client_.lastError().c_str());
+        return false;
     }
-    return failedIds.empty();
-}
 
-bool RomMSyncEngine::handleUploads(SyncContext& ctx) {
-    if (ctx.abort && ctx.abort->load()) return false;
+    const std::string downloadedHash = computeFileHash(tempPath);
+    // RomM hashes an archive over its entries (name + each entry's hash), not over the raw file, so
+    // a zipped save's hash cannot be compared with this app's file hash. Plain saves can.
+    const bool verifiable = !op.hash.empty() && !looksLikeZipArchive(tempPath);
+    if (verifiable && downloadedHash != op.hash) {
+        SF_LOG_E("RomM", "Hash mismatch for %s: expected %s, got %s",
+                 op.fileName.c_str(), op.hash.c_str(), downloadedHash.c_str());
+        FileSystem::removeFile(tempPath);
+        return false;
+    }
 
-    size_t total = ctx.negotiateResp.uploads.size();
-    size_t completed = 0;
-    std::vector<std::string> completedIds;
-    std::vector<std::string> failedIds;
-
-    for (const auto& save : ctx.negotiateResp.uploads) {
-        if (ctx.abort && ctx.abort->load()) break;
-
-        emitProgress(ctx, SyncDetailedProgress::Stage::Uploading,
-                     "Uploading " + save.type + " (" + save.slot + ")",
-                     save.id, -1, completed, total);
-
-        // Find local file
-        auto localPathOpt = mapper_.resolveLocalPath(save);
-        if (!localPathOpt) {
-            SF_LOG_W("RomM", "Local file not found for upload %s", save.id.c_str());
-            failedIds.push_back(save.id);
-            continue;
-        }
-
-        const std::string localPath = *localPathOpt;
-
-        // Verify local file still matches
+    // A local file that also changed is handled by the conflict policy.
+    if (FileSystem::exists(localPath)) {
         const std::string localHash = computeFileHash(localPath);
-        if (localHash != save.hash) {
-            SF_LOG_W("RomM", "Local file changed since negotiation for %s", save.id.c_str());
-            failedIds.push_back(save.id);
-            continue;
-        }
-
-        UploadResponse uploadResp;
-        if (!client_.uploadSave(localPath, save, uploadResp)) {
-            SF_LOG_E("RomM", "Failed to upload save %s: %s", save.id.c_str(), client_.lastError().c_str());
-            failedIds.push_back(save.id);
-            continue;
-        }
-
-        // Update fingerprint with new RomM save ID
-        FileFingerprint fp;
-        fp.hash = localHash;
-        fp.size = save.size;
-        fp.modifiedTime = std::time(nullptr);
-        fp.rommSaveId = uploadResp.saveId;
-        store_.setFingerprint(localPath, fp);
-
-        completedIds.push_back(uploadResp.saveId);
-        ++completed;
-    }
-
-    if (!failedIds.empty()) {
-        lastResult_ = "Uploaded " + std::to_string(completed) + " save(s), " +
-                      std::to_string(failedIds.size()) + " failed";
-    } else {
-        lastResult_ = "Uploaded " + std::to_string(completed) + " save(s)";
-    }
-    return failedIds.empty();
-}
-
-bool RomMSyncEngine::handleConflicts(SyncContext& ctx) {
-    // Conflicts are reported by server when local and remote both changed
-    // With keep_both policy, we already archived local during download
-    // Here we just acknowledge them
-    for (const auto& save : ctx.negotiateResp.conflicts) {
-        SF_LOG_I("RomM", "Conflict for save %s (slot %s) - local archived", save.id.c_str(), save.slot.c_str());
-    }
-    return true;
-}
-
-bool RomMSyncEngine::handleDeletes(SyncContext& ctx) {
-    // Server says these saves should be deleted locally
-    for (const auto& save : ctx.negotiateResp.deletes) {
-        auto localPathOpt = mapper_.resolveLocalPath(save);
-        if (localPathOpt && FileSystem::exists(*localPathOpt)) {
+        if (localHash != downloadedHash) {
             if (config_.conflictPolicy == ConflictPolicy::KeepBoth) {
-                std::string backupPath = *localPathOpt + ".deleted_" + std::to_string(std::time(nullptr));
-                FileSystem::renameFile(*localPathOpt, backupPath);
-                store_.recordConflictBackup(*localPathOpt, backupPath);
-            } else {
-                FileSystem::removeFile(*localPathOpt);
+                const std::string backupPath = localPath + ".conflict_" + std::to_string(std::time(nullptr));
+                if (FileSystem::renameFile(localPath, backupPath)) {
+                    store_.recordConflictBackup(localPath, backupPath);
+                    SF_LOG_I("RomM", "Archived conflicting local save to %s", backupPath.c_str());
+                }
+            } else if (config_.conflictPolicy == ConflictPolicy::KeepLocal) {
+                SF_LOG_I("RomM", "Keeping local save (conflict policy: keep_local)");
+                FileSystem::removeFile(tempPath);
+                return false;
             }
-            store_.removeFingerprint(*localPathOpt);
+            // KeepRemote: overwrite
         }
+    }
+
+    if (!writeFileAtomic(localPath, tempPath)) {
+        SF_LOG_E("RomM", "Failed to write save file %s", localPath.c_str());
+        return false;
+    }
+
+    // Update fingerprint
+    FileFingerprint fp;
+    fp.hash = downloadedHash;
+    fp.size = op.size;
+    fp.modifiedTime = std::time(nullptr);
+    fp.rommSaveId = op.id;
+    store_.setFingerprint(localPath, fp);
+
+    // No confirm call: the content request carries device_id, which is what records the device's
+    // row for the save on the server.
+    return true;
+}
+
+bool RomMSyncEngine::performUpload(SyncContext& ctx, const RomMSave& op) {
+    // The operation carries the server's side; the local file is known from the entry that was sent
+    // at scan time, matched on (rom_id, slot).
+    const RomMSave* local = localEntryFor(ctx, op);
+    std::string localPath;
+    if (local) {
+        localPath = local->localPath;
+    } else {
+        auto localPathOpt = mapper_.resolveLocalPath(op);
+        if (!localPathOpt) {
+            SF_LOG_W("RomM", "Local file not found for upload %s", op.fileName.c_str());
+            return false;
+        }
+        localPath = *localPathOpt;
+    }
+
+    if (!FileSystem::exists(localPath)) {
+        SF_LOG_W("RomM", "Local file missing for upload %s", localPath.c_str());
+        return false;
+    }
+
+    // Re-hash: the file may have changed between the scan and this upload, so send what is on disk
+    // now rather than the bytes the scan hashed.
+    RomMSave meta = local ? *local : op;
+    meta.hash = computeFileHash(localPath);
+    meta.size = static_cast<int64_t>(FileSystem::fileSize(localPath));
+    meta.fileName = FileSystem::filenameOf(localPath);
+    meta.sessionId = ctx.negotiateResp.sessionId;
+    meta.deviceId = config_.deviceId;
+
+    UploadResponse uploadResp;
+    if (!client_.uploadSave(localPath, meta, uploadResp)) {
+        SF_LOG_E("RomM", "Failed to upload %s: %s", op.fileName.c_str(), client_.lastError().c_str());
+        return false;
+    }
+
+    // Update fingerprint with new RomM save ID
+    FileFingerprint fp;
+    fp.hash = meta.hash;
+    fp.size = meta.size;
+    fp.modifiedTime = std::time(nullptr);
+    fp.rommSaveId = uploadResp.saveId;
+    store_.setFingerprint(localPath, fp);
+
+    return true;
+}
+
+bool RomMSyncEngine::performDelete(SyncContext& ctx, const RomMSave& op) {
+    // Server says this slot was emptied here, so the local copy goes too
+    auto localPathOpt = mapper_.resolveLocalPath(op);
+    if (!localPathOpt) return false;
+
+    if (FileSystem::exists(*localPathOpt)) {
+        if (config_.conflictPolicy == ConflictPolicy::KeepBoth) {
+            const std::string backupPath = *localPathOpt + ".deleted_" + std::to_string(std::time(nullptr));
+            FileSystem::renameFile(*localPathOpt, backupPath);
+            store_.recordConflictBackup(*localPathOpt, backupPath);
+        } else {
+            FileSystem::removeFile(*localPathOpt);
+        }
+        store_.removeFingerprint(*localPathOpt);
     }
     return true;
 }
 
-bool RomMSyncEngine::completeSession(SyncContext& ctx) {
-    if (ctx.abort && ctx.abort->load()) return false;
-
-    std::vector<std::string> completed;
-    std::vector<std::string> failed;
-
-    // Collect completed operation IDs
-    for (const auto& save : ctx.negotiateResp.downloads) completed.push_back(save.id);
-    for (const auto& save : ctx.negotiateResp.uploads) completed.push_back(save.id);
-    for (const auto& save : ctx.negotiateResp.conflicts) completed.push_back(save.id);
-    for (const auto& save : ctx.negotiateResp.deletes) completed.push_back(save.id);
-
-    if (!client_.completeSyncSession(ctx.negotiateResp.sessionId, completed, failed)) {
-        SF_LOG_E("RomM", "Failed to complete sync session: %s", client_.lastError().c_str());
-        // Don't fail the whole sync for this
+const RomMSave* RomMSyncEngine::localEntryFor(SyncContext& ctx, const RomMSave& op) const {
+    for (const auto& local : ctx.localSaves) {
+        if (local.romId != op.romId) continue;
+        // Slot is what RomM pairs on; the name is the server's, which for a slotted save carries its
+        // version tag and will not equal the client's.
+        if (local.slot == op.slot) return &local;
+        if (!op.fileName.empty() && local.fileName == op.fileName) return &local;
     }
+    return nullptr;
+}
 
-    store_.setLastSessionId(ctx.negotiateResp.sessionId);
-    store_.clearPendingOperations();
-    return true;
+bool RomMSyncEngine::looksLikeZipArchive(const std::string& path) {
+    std::ifstream in(path, std::ios::binary);
+    if (!in) return false;
+    char magic[4] = {};
+    if (!in.read(magic, 4)) return false;
+    return magic[0] == 'P' && magic[1] == 'K';
 }
 
 void RomMSyncEngine::emitProgress(SyncContext& ctx, SyncDetailedProgress::Stage stage,

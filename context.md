@@ -289,6 +289,18 @@ Do **not** call full `onGameFocused()` on every repeat step — video decode + p
 
 **Cloud restore (Phase 1)**: Settings → **Cloud Restore** lists NXStation `retroarch-saves-*.zip` backups from Google Drive (`NXStation/RetroArch` folder). Restore reads `savefile_directory` / `savestate_directory` from `sdmc:/retroarch/retroarch.cfg` at restore time, creates a local pre-restore ZIP under `data/cloud/`, downloads the backup, then **merge-extracts** (overwrite matching paths only; never deletes local-only files). Progress UI mirrors scrape (`CloudRestoreProgressView` + `cloud_restore_progress.xml`): color-coded per-file log, summary at end, opaque `overlay_bg` fullscreen activity. All keys blocked during restore; hold **B for 3 seconds** to abort (partial merge warning). NXStation backups are **not** interchangeable with RetroArch's own cloud backup format.
 
+## RomM sync API (current shape)
+
+`RomMClient::negotiate` posts `/api/sync/negotiate` with `device_id` at the **top level** plus `device_name`, `sync_enabled` and the per-save list. RomM answers `400` when `device_id` is missing (or when the token is not device-bound and no device is registered) and `400 "Sync is disabled for this device"` when `sync_enabled` is false; missing fields are `422`. The response is `session_id` + `operations[]` (`upload`/`download`/`conflict`/`delete`/`no_op`), not the old `uploads`/`downloads`/`conflicts`/`deletes` arrays; `RomMSyncEngine` dispatches per `action`.
+
+- The save entry schema is `rom_id` (integer), `file_name`, `slot`, `emulator`, `content_hash`, `updated_at` (required, UTC ISO — from `DirEntry::modifiedTime`), `file_size_bytes`.
+- `device_id` lives on the client (`RomMClient::setDeviceId`), not per save. It comes from pairing and is persisted in `data/romm_state.json`; settings.json does not carry it, so `initialize()`/`refreshConfig()` restore it from the state store, and `ensureAuthenticated()` registers a device (`POST /api/devices`) when the token is not device-bound. Sync refuses early when it is still empty.
+- Upload is one multipart `POST /api/saves` (`saveFile` part, metadata as query params) via `CurlHelper::postMultipart` — `postForm` cannot carry a file body. The old two-step create + `PUT /content` is not part of the current API, and a `409` means the slot head is newer.
+- Download is `GET /api/saves/{id}/content?device_id&session_id`; there is no confirm step, the content GET itself records the device row.
+- Sessions close with `POST /api/sync/sessions/{id}/complete` (`operations_completed`/`operations_failed`); it answers `400` if the session is already completed.
+- `content_hash`: RomM uses md5 for plain files, so `sf::Hash::md5File` matches. For archives it hashes md5 over `name:entrymd5` sorted by name joined by newlines, so zip saves skip hash verification (`RomMSyncEngine::looksLikeZipArchive`).
+- `checkResponse` surfaces FastAPI's `{"detail": ...}` body, which is what makes a `400` self-reporting in `NXStation.log`.
+
 ## Key source files
 
 | Area | Files |
@@ -313,6 +325,7 @@ Do **not** call full `onGameFocused()` on every repeat step — video decode + p
 | Network | `source/util/Network.cpp` (NIFM before curl on Switch) |
 | Theme | `source/ui/Theme.cpp` |
 | Cloud sync / restore | `source/cloud/CloudSaveService.cpp`, `CloudRestorePickView.cpp`, `CloudRestoreProgressView.cpp` |
+| RomM sync | `source/romm/RomMClient.cpp`, `RomMSyncEngine.cpp`, `RomMSaveMapper.cpp`, `RomMStateStore.cpp`, `RomMService.cpp` |
 
 ## Logging
 

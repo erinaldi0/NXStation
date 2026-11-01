@@ -83,11 +83,13 @@ private:
     bool runSyncForRom(SyncContext& ctx);
     bool collectLocalFiles(SyncContext& ctx);
     bool negotiate(SyncContext& ctx);
-    bool handleDownloads(SyncContext& ctx);
-    bool handleUploads(SyncContext& ctx);
-    bool handleConflicts(SyncContext& ctx);
-    bool handleDeletes(SyncContext& ctx);
-    bool completeSession(SyncContext& ctx);
+    bool performDownload(SyncContext& ctx, const RomMSave& op);
+    bool performUpload(SyncContext& ctx, const RomMSave& op);
+    bool performDelete(SyncContext& ctx, const RomMSave& op);
+    /** The local entry an operation refers to; matched on (rom_id, slot), which is what RomM pairs on. */
+    const RomMSave* localEntryFor(SyncContext& ctx, const RomMSave& op) const;
+    /** RomM hashes archives over their entries rather than the raw file, so that hash is not comparable. */
+    static bool looksLikeZipArchive(const std::string& path);
 
     void emitProgress(SyncContext& ctx, SyncDetailedProgress::Stage stage,
                       const std::string& message, const std::string& detail = "",

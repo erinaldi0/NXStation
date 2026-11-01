@@ -104,6 +104,31 @@ time_t parseIso8601(const std::string& str) {
     return std::mktime(&tm);
 }
 
+/** RomM ids are ints on the wire; the app keeps them as strings for its mapping files. */
+long long idFromString(const std::string& value) {
+    try {
+        return std::stoll(value);
+    } catch (const std::exception&) {
+        return 0;
+    }
+}
+
+/** Format an epoch time the way negotiate's `updated_at` wants it (UTC, no offset). */
+std::string iso8601Utc(time_t seconds) {
+    std::tm tm = {};
+#if defined(_WIN32)
+    if (gmtime_s(&tm, &seconds) != 0)
+        return {};
+#else
+    if (!gmtime_r(&seconds, &tm))
+        return {};
+#endif
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02d",
+                  tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+    return buf;
+}
+
 const Json* libraryPageItems(const Json& j) {
     if (j.contains("data") && j["data"].is_array()) return &j["data"];
     if (j.is_array()) return &j;
@@ -235,6 +260,7 @@ std::unique_ptr<RomMClient> RomMClient::fork() const {
     // configured from this one's server + tokens rather than a copy.
     auto copy = std::make_unique<RomMClient>();
     copy->configure(baseUrl_, accessToken_, clientToken_);
+    copy->deviceId_ = deviceId_;
     return copy;
 }
 
@@ -273,10 +299,28 @@ void RomMClient::updateAuthHeaders() {
     }
 }
 
+std::string RomMClient::errorDetail(const std::string& body) {
+    if (body.empty())
+        return {};
+    try {
+        const auto j = Json::parse(body);
+        if (j.contains("detail") && j["detail"].is_string())
+            return j["detail"].get<std::string>();
+    } catch (const std::exception&) {
+        // Not every error body is JSON (a proxy can answer with HTML); the status is all we have.
+    }
+    return {};
+}
+
 bool RomMClient::checkResponse(const sf::cloud::CurlResponse& resp, const char* operation) {
     if (!resp.ok) {
         lastError_ = resp.error.empty() ? std::string(operation) + " failed: HTTP " + std::to_string(resp.status)
-                                         : std::string(operation) + " failed: " + resp.error;
+                                        : std::string(operation) + " failed: " + resp.error;
+        // FastAPI answers a 4xx with {"detail": "..."}, and negotiate can 400 for two different
+        // reasons that look identical without it (no device_id, or the device's sync toggle off).
+        const std::string detail = errorDetail(resp.body);
+        if (!detail.empty())
+            lastError_ += ": " + detail;
         if (resp.status == 401)
             lastError_ += " (token invalid or expired — re-pair in RomM settings)";
         SF_LOG_E("RomM", "%s", lastError_.c_str());
@@ -397,17 +441,27 @@ bool RomMClient::negotiate(const std::vector<RomMSave>& localSaves, NegotiateRes
         return false;
     }
 
+    out = NegotiateResponse{};
+
     Json body = Json::object();
+    // device_id belongs at the top level. RomM infers it from the token only when that token is
+    // device-bound; the app used to put it inside each save entry, which is not the payload schema
+    // and is what made every startup negotiate answer 400.
+    body["device_id"] = deviceId_;
+
     Json savesArray = Json::array();
     for (const auto& save : localSaves) {
         Json s = Json::object();
-        s["rom_id"] = save.romId;
-        s["slot"] = save.slot;
-        s["device_id"] = save.deviceId;
-        s["type"] = save.type;
-        s["hash"] = save.hash;
-        s["size"] = save.size;
-        if (!save.coreId.empty()) s["core_id"] = save.coreId;
+        s["rom_id"] = idFromString(save.romId);
+        // ClientSaveState requires file_name, updated_at and file_size_bytes; they were missing from
+        // the earlier payload. A slot is optional, and an omitted slot is meaningful: RomM treats a
+        // null slot as an archival upload that is never paired with a slotted server save.
+        s["file_name"] = save.fileName;
+        s["updated_at"] = iso8601Utc(save.updatedAt);
+        s["file_size_bytes"] = save.size;
+        if (!save.slot.empty()) s["slot"] = save.slot;
+        if (!save.coreId.empty()) s["emulator"] = save.coreId;
+        if (!save.hash.empty()) s["content_hash"] = save.hash;
         savesArray.push_back(std::move(s));
     }
     body["saves"] = std::move(savesArray);
@@ -417,31 +471,37 @@ bool RomMClient::negotiate(const std::vector<RomMSave>& localSaves, NegotiateRes
 
     try {
         const auto j = Json::parse(resp.body);
-        out.sessionId = jsonStringField(j, "session_id");
+        const long long sessionId = jsonNumberField(j, "session_id", 0);
+        // Kept as a string because the app stores it and builds the complete URL from it.
+        out.sessionId = sessionId ? std::to_string(sessionId) : jsonStringField(j, "session_id");
 
-        auto parseSaves = [&](const Json& arr, std::vector<RomMSave>& vec) {
-            if (!arr.is_array()) return;
-            for (const auto& s : arr) {
+        // The current schema answers with one flat operations array (action per entry) rather than
+        // the older uploads/downloads/conflicts/deletes arrays.
+        if (j.contains("operations") && j["operations"].is_array()) {
+            for (const auto& op : j["operations"]) {
                 RomMSave save;
-                save.id = jsonStringField(s, "id");
-                save.romId = jsonStringField(s, "rom_id");
-                save.slot = jsonStringField(s, "slot");
-                save.deviceId = jsonStringField(s, "device_id");
-                save.sessionId = jsonStringField(s, "session_id");
-                save.hash = jsonStringField(s, "hash");
-                save.size = jsonNumberField(s, "size", 0);
-                save.type = jsonStringField(s, "type");
-                save.coreId = jsonStringField(s, "core_id");
-                save.createdAt = jsonStringField(s, "created_at");
-                save.updatedAt = jsonStringField(s, "updated_at");
-                if (!save.id.empty()) vec.push_back(std::move(save));
+                save.action = jsonStringField(op, "action");
+                save.romId = std::to_string(jsonNumberField(op, "rom_id", 0));
+                const long long saveId = jsonNumberField(op, "save_id", 0);
+                // Null for uploads and deletes: the server has no row for them yet.
+                if (saveId) save.id = std::to_string(saveId);
+                save.slot = jsonStringField(op, "slot");
+                save.fileName = jsonStringField(op, "file_name");
+                save.coreId = jsonStringField(op, "emulator");
+                save.reason = jsonStringField(op, "reason");
+                save.hash = jsonStringField(op, "server_content_hash");
+                save.updatedAt = parseIso8601(jsonStringField(op, "server_updated_at"));
+                save.deviceId = deviceId_;
+                save.sessionId = out.sessionId;
+                out.operations.push_back(std::move(save));
             }
-        };
+        }
 
-        parseSaves(j["uploads"], out.uploads);
-        parseSaves(j["downloads"], out.downloads);
-        parseSaves(j["conflicts"], out.conflicts);
-        parseSaves(j["deletes"], out.deletes);
+        out.totalUpload = static_cast<size_t>(jsonNumberField(j, "total_upload", 0));
+        out.totalDownload = static_cast<size_t>(jsonNumberField(j, "total_download", 0));
+        out.totalConflict = static_cast<size_t>(jsonNumberField(j, "total_conflict", 0));
+        out.totalDelete = static_cast<size_t>(jsonNumberField(j, "total_delete", 0));
+        out.totalNoOp = static_cast<size_t>(jsonNumberField(j, "total_no_op", 0));
 
         return true;
     } catch (const std::exception& ex) {
@@ -456,36 +516,29 @@ bool RomMClient::uploadSave(const std::string& localPath, const RomMSave& meta, 
         return false;
     }
 
-    // First, create the save metadata
-    Json body = Json::object();
-    body["rom_id"] = meta.romId;
-    body["slot"] = meta.slot;
-    body["device_id"] = meta.deviceId;
-    body["session_id"] = meta.sessionId;
-    body["type"] = meta.type;
-    body["hash"] = meta.hash;
-    body["size"] = meta.size;
-    if (!meta.coreId.empty()) body["core_id"] = meta.coreId;
+    // One request now: RomM takes the save as a multipart `saveFile` part with the metadata as query
+    // parameters. The earlier two-step create + PUT /content is not part of the current API.
+    std::string url = buildUrl("/saves") +
+                      "?rom_id=" + meta.romId +
+                      "&device_id=" + sf::url::encodeQueryValue(deviceId_) +
+                      "&session_id=" + meta.sessionId;
+    if (!meta.slot.empty()) url += "&slot=" + sf::url::encodeQueryValue(meta.slot);
+    if (!meta.coreId.empty()) url += "&emulator=" + sf::url::encodeQueryValue(meta.coreId);
+    if (!meta.hash.empty()) url += "&content_hash=" + sf::url::encodeQueryValue(meta.hash);
 
-    const sf::cloud::CurlResponse resp = curl_.postJson(buildUrl("/saves"), body.dump());
-    if (!checkResponse(resp, "Save create")) return false;
+    const sf::cloud::CurlResponse resp = curl_.postMultipart(url, {}, "saveFile", localPath);
+    if (!checkResponse(resp, "Save upload")) return false;
 
     try {
         const auto j = Json::parse(resp.body);
-        std::string saveId = jsonStringField(j, "id");
-        out.sessionId = jsonStringField(j, "session_id");
-
-        if (saveId.empty()) {
-            lastError_ = "Missing save ID in create response";
+        const long long saveId = jsonNumberField(j, "id", 0);
+        if (!saveId) {
+            lastError_ = "Missing save ID in upload response";
             return false;
         }
 
-        // Now upload the content
-        std::string uploadUrl = buildUrl("/saves/" + saveId + "/content");
-        const sf::cloud::CurlResponse uploadResp = curl_.uploadFromFile(uploadUrl, localPath);
-        if (!checkResponse(uploadResp, "Save content upload")) return false;
-
-        out.saveId = saveId;
+        out.saveId = std::to_string(saveId);
+        out.sessionId = meta.sessionId;
         return true;
     } catch (const std::exception& ex) {
         lastError_ = ex.what();
@@ -493,45 +546,39 @@ bool RomMClient::uploadSave(const std::string& localPath, const RomMSave& meta, 
     }
 }
 
-bool RomMClient::downloadSave(const std::string& saveId, const std::string& localPath) {
+bool RomMClient::downloadSave(const std::string& saveId, const std::string& localPath,
+                              const std::string& sessionId) {
     if (!ready_) {
         lastError_ = "Client not authenticated";
         return false;
     }
 
-    std::string url = buildUrl("/saves/" + saveId + "/content");
+    // device_id is what makes the download count as a sync: RomM records the device's row for the
+    // save only when it can identify the device, and session_id increments the session counter.
+    std::string url = buildUrl("/saves/" + saveId + "/content") +
+                      "?device_id=" + sf::url::encodeQueryValue(deviceId_);
+    if (!sessionId.empty()) url += "&session_id=" + sessionId;
+
     const sf::cloud::CurlResponse resp = curl_.downloadToFile(url, localPath);
     return checkResponse(resp, "Save download");
 }
 
-bool RomMClient::confirmDownload(const std::string& saveId, const std::string& hash) {
-    if (!ready_) {
-        lastError_ = "Client not authenticated";
-        return false;
-    }
-
-    Json body = Json::object();
-    body["hash"] = hash;
-
-    const sf::cloud::CurlResponse resp = curl_.postJson(buildUrl("/saves/" + saveId + "/downloaded"), body.dump());
-    return checkResponse(resp, "Confirm download");
-}
-
 bool RomMClient::completeSyncSession(const std::string& sessionId,
-                                     const std::vector<std::string>& completed,
-                                     const std::vector<std::string>& failed) {
+                                     size_t operationsCompleted, size_t operationsFailed) {
     if (!ready_) {
         lastError_ = "Client not authenticated";
         return false;
     }
+    if (sessionId.empty() || sessionId == "0") {
+        lastError_ = "No sync session to complete";
+        return false;
+    }
 
+    // The session closes with counts, not with the list of operation ids it used to take. A session
+    // already completed answers 400, so the engine keeps this step non-fatal.
     Json body = Json::object();
-    Json completedArr = Json::array();
-    for (const auto& id : completed) completedArr.push_back(id);
-    Json failedArr = Json::array();
-    for (const auto& id : failed) failedArr.push_back(id);
-    body["completed"] = std::move(completedArr);
-    body["failed"] = std::move(failedArr);
+    body["operations_completed"] = static_cast<long long>(operationsCompleted);
+    body["operations_failed"] = static_cast<long long>(operationsFailed);
 
     const sf::cloud::CurlResponse resp = curl_.postJson(buildUrl("/sync/sessions/" + sessionId + "/complete"), body.dump());
     return checkResponse(resp, "Complete sync session");

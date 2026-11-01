@@ -3,6 +3,7 @@
 #include "util/Paths.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -557,6 +558,7 @@ static std::vector<DirEntry> listDirectorySwitch(const std::string& path)
 
         entry.isDirectory = S_ISDIR(st.st_mode);
         entry.size = static_cast<uint64_t>(st.st_size);
+        entry.modifiedTime = static_cast<time_t>(st.st_mtime);
         out.push_back(std::move(entry));
     }
     closedir(d);
@@ -586,6 +588,11 @@ static std::vector<DirEntry> listDirectoryDesktop(const std::string& path)
         entry.isDirectory = item.is_directory(ec);
         if (!entry.isDirectory)
             entry.size = static_cast<uint64_t>(item.file_size(ec));
+        const auto stamp = item.last_write_time(ec);
+        if (!ec)
+            // last_write_time is not on the Unix epoch, so go through the system clock.
+            entry.modifiedTime = static_cast<time_t>(
+                std::chrono::clock_cast<std::chrono::system_clock>(stamp).time_since_epoch().count());
         out.push_back(std::move(entry));
     }
 
