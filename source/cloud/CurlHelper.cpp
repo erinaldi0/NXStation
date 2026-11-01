@@ -218,8 +218,14 @@ CurlResponse CurlHelper::perform(const char* method, const std::string& url, con
     CURLcode code = attempt();
 
     // Handle-level init/connection failures on Switch are usually transient; one retry
-    // with a fresh handle recovers without the caller noticing.
-    const bool retryable = code == CURLE_FAILED_INIT || code == CURLE_COULDNT_CONNECT;
+    // with a fresh handle recovers without the caller noticing. The send/receive errors cover a
+    // connection dropped mid-request, and CURLE_BAD_FUNCTION_ARGUMENT is how easy.c maps an
+    // internal multi-state error: the easy API runs every perform through a persistent internal
+    // multi handle, so a fresh handle is what clears the bad state a retry on the same one would
+    // inherit.
+    const bool retryable = code == CURLE_FAILED_INIT || code == CURLE_COULDNT_CONNECT
+                           || code == CURLE_SEND_ERROR || code == CURLE_RECV_ERROR
+                           || code == CURLE_BAD_FUNCTION_ARGUMENT;
     if (retryable) {
         curl_easy_cleanup(curl_);
         curl_ = curl_easy_init();
