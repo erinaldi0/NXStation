@@ -130,11 +130,15 @@ std::string firstExistingPath(const std::vector<std::string>& candidates)
     return {};
 }
 
-size_t gameIndexForPath(const std::string& systemId, const std::string& romPath)
+size_t gameIndexForPath(const std::string& systemId, const std::string& romPath,
+                        const std::string& romId = {})
 {
     const auto& games = AppState::instance().gamesFor(systemId);
     for (size_t i = 0; i < games.size(); ++i) {
-        if (games[i].path == romPath)
+        // The id wins first: a remote row has an empty path, so path matching alone returns
+        // the first remote row of the system for every remote card.
+        if ((!romId.empty() && games[i].rommRomId == romId) ||
+            (!romPath.empty() && games[i].path == romPath))
             return i;
     }
     return 0;
@@ -437,7 +441,11 @@ void DashboardHomeView::onCellFocused(DashboardCell* cell)
         const auto& games = AppState::instance().gamesFor(cell->systemId());
         const GameItem* game = nullptr;
         for (const auto& item : games) {
-            if (item.path == cell->romPath()) {
+            // Id first, then path: a remote card has no path, and comparing empty paths made
+            // every remote card show the first remote row of its system (e.g. every GBA card
+            // showed the top of the GBA list).
+            if ((!cell->romId().empty() && item.rommRomId == cell->romId()) ||
+                (!cell->romPath().empty() && item.path == cell->romPath())) {
                 game = &item;
                 break;
             }
@@ -456,11 +464,12 @@ void DashboardHomeView::openCell(DashboardCell* cell)
     NavigationState::setLastSystem(cell->systemId());
 
     const std::string systemId = cell->systemId();
-    size_t focus = gameIndexForPath(systemId, cell->romPath());
+    size_t focus = gameIndexForPath(systemId, cell->romPath(), cell->romId());
     if (cell->isSystemCell()) {
-        // Land on the game the Focus block is showing for this platform.
-        focus = (heroGame_.systemId == systemId && !heroGame_.path.empty())
-                    ? gameIndexForPath(systemId, heroGame_.path)
+        // Land on the game the Focus block is showing for this platform — a remote hero game
+        // is identified by its RomM id, not by a path it does not have.
+        focus = (heroGame_.systemId == systemId && (!heroGame_.path.empty() || !heroGame_.rommRomId.empty()))
+                    ? gameIndexForPath(systemId, heroGame_.path, heroGame_.rommRomId)
                     : 0;
     }
     brls::sync([systemId, focus]() { PushedActivity::push(new GameListView(systemId, focus)); });
@@ -507,6 +516,7 @@ brls::Box* DashboardHomeView::makeCard(const GameItem& game, float imageHeight, 
     const float detailFont = tokenChain("card_detail_font", "font_meta", 14.f);
 
     auto* cell = new DashboardCell(this, game.systemId, game.path, false);
+    cell->setRomId(game.rommRomId);
     cell->setAxis(brls::Axis::COLUMN);
     cell->setPadding(pad, pad, pad, pad);
     cell->setCornerRadius(radius);
@@ -1149,7 +1159,13 @@ void DashboardHomeView::updateHero(const GameItem* game)
             setMetaBadge("Downloaded");
         if (game->discCount > 1)
             setMetaBadge(std::to_string(game->discCount) + " discs");
-        if (!game->meta.scraped)
+        // The badge follows what the panel actually shows, not only the scraped flag: RomM-resolved
+        // fields render for rows that never got a gamelist entry (remote rows are images only), so
+        // a row with content must not read as "No metadata". Same rule as GameDetailView's meta line.
+        const bool hasMeta = game->meta.scraped || !game->meta.description.empty() ||
+                             !game->meta.genre.empty() || !game->meta.developer.empty() ||
+                             !game->meta.publisher.empty() || !game->meta.releaseDate.empty();
+        if (!hasMeta)
             setMetaBadge("No metadata");
     }
 

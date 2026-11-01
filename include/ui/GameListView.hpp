@@ -52,6 +52,7 @@ private:
     void toggleFavorite(size_t index);
     void launchGame(size_t index);
     void onGameFocused(size_t index, int direction);
+    void restoreFocusAfterPop();
     void applyPreviewContent(size_t index);
     void applyLightPreview(size_t index);
     void runPreviewTransition(size_t index, int direction);
@@ -91,6 +92,8 @@ private:
     std::vector<sf::GameItem> games_;
     size_t initialFocus_ = 0;
     size_t focusedIndex_ = static_cast<size_t>(-1);
+    /** Row the focus stack must re-select after an activity pop (the recorded cell gets recycled). */
+    size_t restoreFocusIndex_ = static_cast<size_t>(-1);
     bool customList_ = false;
     std::string customTitle_;
     std::string customSubtitle_;

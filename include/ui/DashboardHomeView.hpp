@@ -28,17 +28,24 @@ public:
 
     void setIdleBorderColor(NVGcolor color) { idleBorderColor_ = color; }
 
+    /** RomM id of the row this card was built from. Remote rows have no path, so the id is
+     *  the only thing that can identify them in the game list; matching by path alone made every
+     *  remote card resolve to the first remote row of its system. */
+    void setRomId(std::string romId) { romId_ = std::move(romId); }
+
     void onFocusGained() override;
     void onFocusLost() override;
 
     const std::string& systemId() const { return systemId_; }
     const std::string& romPath() const { return romPath_; }
+    const std::string& romId() const { return romId_; }
     bool isSystemCell() const { return isSystemCell_; }
 
 private:
     DashboardHomeView* owner_;
     std::string systemId_;
     std::string romPath_;
+    std::string romId_;
     bool isSystemCell_;
     NVGcolor idleBorderColor_{0, 0, 0, 0};
 };

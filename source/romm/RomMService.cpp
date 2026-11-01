@@ -299,23 +299,37 @@ void RomMService::populateVirtualLibrary() {
         g.discCount = static_cast<int>(entry.rom.files.size());
         g.cloudAvailable = !entry.downloadedLocally;
 
-        // RomM has already resolved this metadata, so cloud rows show a description and the
-        // usual details even when they were never scraped locally.
-        if (g.cloudAvailable) {
-            g.meta.description = entry.rom.summary;
-            g.meta.genre = entry.rom.genres;
-            g.meta.developer = entry.rom.developer;
-            g.meta.publisher = entry.rom.publisher;
-            g.meta.releaseDate = entry.rom.releaseDate;
+        // The metadata fields have to be resolved for every matched row, not just the cloud ones:
+        // applyLocalMedia only fills media paths, so an already-downloaded row showed a cover but
+        // no description. Base the row on the persisted gamelist entry for its stem (the same cache
+        // writeMetadata merges into), then let RomM's resolved fields win on top, the same
+        // precedence RomMArtFetcher::writeMetadata uses.
+        const std::string artStem = RomMArtFetcher::stemFor(entry);
+        auto& cache = AppState::instance().metaCache();
+        if (!artStem.empty() && !entry.matchedSystemId.empty()) {
+            if (const auto existing = cache.load(entry.matchedSystemId, artStem))
+                g.meta = *existing;
         }
 
-        // Local scrape cache hits for already-downloaded titles still show art / metadata. Art is
-        // resolved by stem from the system's images folder, so a still-remote row can show the cover
-        // the fetcher pulled for it too — provided the stem here is the one the fetcher wrote the
+        g.meta.systemId = entry.matchedSystemId;
+        g.meta.romPath = entry.localPath;
+        g.meta.title = g.displayName;
+        if (!entry.rom.summary.empty())
+            g.meta.description = entry.rom.summary;
+        if (!entry.rom.genres.empty())
+            g.meta.genre = entry.rom.genres;
+        if (!entry.rom.developer.empty())
+            g.meta.developer = entry.rom.developer;
+        if (!entry.rom.publisher.empty())
+            g.meta.publisher = entry.rom.publisher;
+        if (!entry.rom.releaseDate.empty())
+            g.meta.releaseDate = entry.rom.releaseDate;
+
+        // Art is resolved by stem from the system's images folder, so a still-remote row can show the
+        // cover the fetcher pulled for it too — provided the stem here is the one the fetcher wrote the
         // files under, which is what stemFor gives for both kinds of row.
-        const std::string artStem = RomMArtFetcher::stemFor(entry);
         if (!artStem.empty() && !entry.matchedSystemId.empty())
-            AppState::instance().metaCache().applyLocalMedia(g.meta, entry.matchedSystemId, artStem);
+            cache.applyLocalMedia(g.meta, entry.matchedSystemId, artStem);
 
         if (g.cloudAvailable && !g.systemId.empty()) {
             cloudBySystem[g.systemId].push_back(g);

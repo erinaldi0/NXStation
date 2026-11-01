@@ -843,6 +843,20 @@ void GameListView::onRowFocused(size_t index)
 {
     if (jumping_ || overlayBlocking_ || index >= games_.size())
         return;
+
+    // An activity pop restores the focus stack entry recorded when it was pushed, which is the
+    // cell that was focused then; the refresh during the download recycled that cell for another
+    // row, so the pop could highlight an unrelated game. Route focus back to the row the pop
+    // should have landed on.
+    if (restoreFocusIndex_ < games_.size()) {
+        const size_t target = restoreFocusIndex_;
+        restoreFocusIndex_ = static_cast<size_t>(-1);
+        if (target == index)
+            return;
+        jumpToIndex(target, false);
+        return;
+    }
+
     if (index == focusedIndex_)
         return;
     playNavSfx();
@@ -1511,6 +1525,15 @@ void GameListView::startRomMDownload(const sf::GameItem& game, bool launchAfterD
             popOverlayBlock();
     });
 
+    // The focus stack entry is the cell that was focused when this screen was pushed, and the
+    // completion refresh recycles cells, so that entry can now render a different game. Remember
+    // the row the pop must land on; GameListView::onRowFocused routes focus back to it, and the
+    // pop callback covers the case where the remembered cell itself was recycled.
+    view->setOnPop([this, alive]() {
+        if (*alive)
+            restoreFocusAfterPop();
+    });
+
     auto viewAlive = view->alive();
 
     // Push the activity before starting the worker: the first progress event fires immediately
@@ -1537,21 +1560,30 @@ void GameListView::startRomMDownload(const sf::GameItem& game, bool launchAfterD
             sf::romm::RomMService::instance().populateVirtualLibrary();
             refreshFromStore();
 
-            if (ok && launchAfterDownload) {
-                for (size_t i = 0; i < games_.size(); ++i) {
-                    if (games_[i].rommRomId == rommRomId) {
-                        brls::Application::popActivity(brls::TransitionAnimation::FADE);
-                        launchGame(i);
-                        return;
-                    }
+            size_t downloadedIndex = static_cast<size_t>(-1);
+            for (size_t i = 0; i < games_.size(); ++i) {
+                if (games_[i].rommRomId == rommRomId) {
+                    downloadedIndex = i;
+                    break;
                 }
             }
 
+            if (ok && launchAfterDownload && downloadedIndex < games_.size()) {
+                brls::Application::popActivity(brls::TransitionAnimation::FADE);
+                launchGame(downloadedIndex);
+                return;
+            }
+
             // Success returns straight to the list; failures stay on the progress screen so
-            // the message can be read before B pops it.
+            // the message can be read before B pops it. Either way the pop must land back on the
+            // row that was selected before the download started.
+            restoreFocusIndex_ = downloadedIndex < games_.size() ? downloadedIndex : focusedIndex_;
+
             if (ok) {
                 brls::Application::notify("Download complete");
-                brls::Application::popActivity(brls::TransitionAnimation::FADE);
+                brls::Application::popActivity(brls::TransitionAnimation::FADE, [this]() {
+                    restoreFocusAfterPop();
+                });
             } else {
                 brls::Application::notify(message.empty() ? "Download failed" : message);
             }
@@ -1630,8 +1662,11 @@ void GameListView::applyPreviewContent(size_t index)
     if (g.meta.boxArtPath.empty() && g.meta.logoPath.empty() && g.meta.videoPath.empty()) {
         const SystemConfig* sys = Config::instance().findSystem(favSystemId);
         if (sys) {
+            // Remote RomM rows have no local path, so the stem is the server file name — the same
+            // stem RomMArtFetcher::stemFor wrote the images under. Probing stemOf(path) here left a
+            // row on the placeholder until the whole list was rebuilt, even after its cover landed.
             GamelistXml::applyFallbackMedia(g.meta, sys->path, g.filename,
-                                            FileSystem::stemOf(g.path));
+                                            FileSystem::stemOf(g.path.empty() ? g.filename : g.path));
         }
     }
 
@@ -1711,6 +1746,14 @@ void GameListView::onGameFocused(size_t index, int direction)
     focusedIndex_ = index;
     initialFocus_ = index;
     runPreviewTransition(index, direction);
+}
+
+void GameListView::restoreFocusAfterPop()
+{
+    const size_t target = restoreFocusIndex_;
+    restoreFocusIndex_ = static_cast<size_t>(-1);
+    if (target < games_.size())
+        jumpToIndex(target, false);
 }
 
 void GameListView::requestArtwork(size_t index)

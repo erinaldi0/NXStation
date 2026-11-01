@@ -26,6 +26,9 @@ public:
 
     std::shared_ptr<bool> alive() const { return alive_; }
     void setOnDismiss(std::function<void()> callback) { onDismiss_ = std::move(callback); }
+    /** Runs after the activity pop, once the focus stack has been restored. */
+    void setOnPop(std::function<void()> callback) { onPop_ = std::move(callback); }
+    const std::function<void()>& onPop() const { return onPop_; }
 
     void willAppear(bool resetState = false) override;
     void willDisappear(bool resetState = false) override;
@@ -36,6 +39,7 @@ private:
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(false);
     bool finished_ = false;
     std::function<void()> onDismiss_;
+    std::function<void()> onPop_;
 
     brls::Label* titleLabel_ = nullptr;
     brls::Label* statusLabel_ = nullptr;
@@ -82,7 +86,11 @@ public:
             [this](brls::View*) {
                 if (view_->handleBack())
                     return true;
-                brls::Application::popActivity(brls::TransitionAnimation::FADE);
+                const std::function<void()> onPop = view_->onPop();
+                brls::Application::popActivity(brls::TransitionAnimation::FADE, [onPop]() {
+                    if (onPop)
+                        onPop();
+                });
                 return true;
             },
             false, false, brls::SOUND_BACK);
