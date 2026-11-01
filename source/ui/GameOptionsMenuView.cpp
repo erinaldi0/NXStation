@@ -56,6 +56,9 @@ GameOptionsMenuView::GameOptionsMenuView(std::string systemId, const sf::GameIte
     if (game.fromRomM && game.path.empty())
         addOption("Download from RomM", GameOptionsAction::Download);
 
+    if (game.fromRomM && !game.path.empty())
+        addOption("Sync Save Files", GameOptionsAction::SyncSaveFiles);
+
     addOption("Search", GameOptionsAction::Search);
     addOption("Jump to Letter / Number", GameOptionsAction::JumpAlphabet);
     addOption("Show Metadata", GameOptionsAction::ShowMetadata);

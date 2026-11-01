@@ -1,4 +1,5 @@
 #include "romm/RomMSettingsView.hpp"
+#include "ui/SaveSyncPickView.hpp"
 #include "ui/SettingsHelpers.hpp"
 #include "ui/SystemsTab.hpp"
 #include "ui/ThemeManager.hpp"
@@ -575,6 +576,14 @@ void buildRomMSettingsRows(brls::Box* listBox) {
     });
     styleSettingsCell(syncNowRow);
     listBox->addView(syncNowRow);
+
+    auto* pickRow = makeSettingsRow("Choose Files to Sync", "Pick saves and states per file, grouped by game and slot");
+    pickRow->registerClickAction([](brls::View*) {
+        SaveSyncPickView::present();
+        return true;
+    });
+    styleSettingsCell(pickRow);
+    listBox->addView(pickRow);
 
     // Background job: the status row shows live progress without a page, and clicking it starts
     // whatever is still queued (the cache is pre-filtered, so a rerun only carries the work left).

@@ -435,6 +435,48 @@ bool RomMClient::updateDevice(const std::string& deviceId, const std::string& na
     return true;
 }
 
+bool RomMClient::fetchDevices(std::vector<Device>& out) {
+    if (!ready_) {
+        lastError_ = "Client not authenticated";
+        return false;
+    }
+
+    const sf::cloud::CurlResponse resp = curl_.get(buildUrl("/devices"));
+    if (!checkResponse(resp, "Fetch devices")) return false;
+
+    try {
+        const auto j = Json::parse(resp.body);
+        const Json* items = libraryPageItems(j);
+        if (!items) {
+            lastError_ = "Invalid devices response format";
+            return false;
+        }
+
+        for (const auto& item : *items) {
+            if (!item.is_object())
+                continue;
+            Device device;
+            // Device ids are UUIDs on current builds, but some builds answer with an integer,
+            // so accept both shapes like the registration parser does.
+            device.id = jsonStringField(item, "id");
+            if (device.id.empty()) {
+                const long long id = jsonNumberField(item, "id", 0);
+                if (id) device.id = std::to_string(id);
+            }
+            if (device.id.empty()) continue;
+            device.name = jsonStringField(item, "name");
+            device.platform = jsonStringField(item, "platform");
+            device.lastSeen = jsonStringField(item, "last_seen");
+            if (device.lastSeen.empty()) device.lastSeen = jsonStringField(item, "lastSeen");
+            out.push_back(std::move(device));
+        }
+        return true;
+    } catch (const std::exception& ex) {
+        lastError_ = ex.what();
+        return false;
+    }
+}
+
 bool RomMClient::negotiate(const std::vector<RomMSave>& localSaves, NegotiateResponse& out,
                            const std::vector<std::string>& romIds) {
     if (!ready_) {
@@ -504,7 +546,11 @@ bool RomMClient::negotiate(const std::vector<RomMSave>& localSaves, NegotiateRes
                 save.reason = jsonStringField(op, "reason");
                 save.hash = jsonStringField(op, "server_content_hash");
                 save.updatedAt = parseIso8601(jsonStringField(op, "server_updated_at"));
-                save.deviceId = deviceId_;
+                // Download and conflict rows belong to whichever device owns the server save; the
+                // picker groups by device, so the owner must survive parsing. Upload and delete
+                // rows have no server row, so they stay attributed to this device.
+                save.deviceId = jsonStringField(op, "device_id");
+                if (save.deviceId.empty()) save.deviceId = deviceId_;
                 save.sessionId = out.sessionId;
                 out.operations.push_back(std::move(save));
             }

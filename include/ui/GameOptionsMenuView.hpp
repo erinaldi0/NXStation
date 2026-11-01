@@ -21,6 +21,8 @@ enum class GameOptionsAction {
     Delete,
     /** RomM rows that are not downloaded locally yet. */
     Download,
+    /** RomM games downloaded locally: per-file save/state sync picker. */
+    SyncSaveFiles,
 };
 
 using GameOptionsCallback = std::function<void(GameOptionsAction action)>;

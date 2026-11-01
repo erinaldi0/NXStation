@@ -63,8 +63,16 @@ bool RomMStateStore::load() {
             }
         }
 
-        SF_LOG_I("RomM", "Loaded sync state: device=%s, fingerprints=%zu, pending=%zu",
-                 deviceId_.c_str(), fingerprints_.size(), pendingOps_.size());
+        if (j.contains("device_names") && j["device_names"].is_object()) {
+            for (const auto& [id, name] : j["device_names"].items()) {
+                if (name.is_string()) {
+                    deviceNames_[id] = name.get<std::string>();
+                }
+            }
+        }
+
+        SF_LOG_I("RomM", "Loaded sync state: device=%s, fingerprints=%zu, pending=%zu, device names=%zu",
+                 deviceId_.c_str(), fingerprints_.size(), pendingOps_.size(), deviceNames_.size());
         return true;
     } catch (const std::exception& ex) {
         SF_LOG_E("RomM", "Failed to load sync state: %s", ex.what());
@@ -110,6 +118,12 @@ bool RomMStateStore::save() {
         conflicts[local] = backup;
     }
     root["conflict_backups"] = std::move(conflicts);
+
+    Json names = Json::object();
+    for (const auto& [id, name] : deviceNames_) {
+        names[id] = name;
+    }
+    root["device_names"] = std::move(names);
 
     return writeAtomic(root.dump(2));
 }
@@ -177,6 +191,16 @@ std::optional<std::string> RomMStateStore::getConflictBackup(const std::string& 
     auto it = conflictBackups_.find(localPath);
     if (it != conflictBackups_.end()) return it->second;
     return std::nullopt;
+}
+
+std::optional<std::string> RomMStateStore::getDeviceName(const std::string& deviceId) const {
+    auto it = deviceNames_.find(deviceId);
+    if (it != deviceNames_.end()) return it->second;
+    return std::nullopt;
+}
+
+void RomMStateStore::setDeviceName(const std::string& deviceId, const std::string& name) {
+    deviceNames_[deviceId] = name;
 }
 
 } // namespace sf::romm

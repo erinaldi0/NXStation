@@ -156,6 +156,12 @@ public:
     bool exchangePairingCode(const std::string& code, PairingResponse& out);
     bool registerDevice(const std::string& deviceName, Device& out);
     bool updateDevice(const std::string& deviceId, const std::string& name);
+    /**
+     * The user's devices, so the save picker can label rows by device name instead of the raw
+     * id. Client-token scope returns them; a plain API token may not, so callers keep a cached
+     * fallback in the state store.
+     */
+    bool fetchDevices(std::vector<Device>& out);
 
     /**
      * Device id the sync calls carry: RomM takes it at the top level of negotiate (a device-bound

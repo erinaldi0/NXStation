@@ -78,6 +78,14 @@ public:
     void recordConflictBackup(const std::string& localPath, const std::string& backupPath);
     std::optional<std::string> getConflictBackup(const std::string& localPath) const;
 
+    /**
+     * Device name cache (deviceId -> display name). The file picker groups save rows by the
+     * device that owns them, and a fetch can fail or return nothing for a plain API token, so
+     * the names seen once are persisted and reused offline.
+     */
+    std::optional<std::string> getDeviceName(const std::string& deviceId) const;
+    void setDeviceName(const std::string& deviceId, const std::string& name);
+
 private:
     const RomMConfig& config_;
     std::string deviceId_;
@@ -91,6 +99,7 @@ private:
     std::unordered_map<std::string, FileFingerprint> fingerprints_;
     std::vector<PendingOperation> pendingOps_;
     std::unordered_map<std::string, std::string> conflictBackups_;
+    std::unordered_map<std::string, std::string> deviceNames_;
 
     std::string stateFilePath() const;
     std::string tempStateFilePath() const;

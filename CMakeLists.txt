@@ -225,6 +225,19 @@ elseif (PLATFORM_DESKTOP)
     set_target_properties(playtime_analytics_test PROPERTIES CXX_STANDARD 23)
     target_compile_options(playtime_analytics_test PRIVATE -ffunction-sections -fdata-sections)
     add_test(NAME playtime_analytics_test COMMAND playtime_analytics_test)
+
+    set(SYNC_CANDIDATES_TEST_SRC
+        tests/romm_sync_candidates_test.cpp
+        source/romm/RomMSyncCandidate.cpp
+    )
+    add_executable(romm_sync_candidates_test ${SYNC_CANDIDATES_TEST_SRC})
+    # RomMSyncCandidate.hpp pulls in RomMClient.hpp -> CurlHelper.hpp -> <curl/curl.h>, so the
+    # test needs the curl headers even though it never calls curl.
+    target_include_directories(romm_sync_candidates_test PRIVATE ${APP_PLATFORM_INCLUDE} ${CURL_INCLUDE_DIRS})
+    target_compile_definitions(romm_sync_candidates_test PRIVATE PLATFORM_DESKTOP=1)
+    set_target_properties(romm_sync_candidates_test PROPERTIES CXX_STANDARD 23)
+    target_compile_options(romm_sync_candidates_test PRIVATE -ffunction-sections -fdata-sections)
+    add_test(NAME romm_sync_candidates_test COMMAND romm_sync_candidates_test)
 endif ()
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${APP_PLATFORM_INCLUDE})

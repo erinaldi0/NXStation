@@ -18,6 +18,7 @@
 #include "ui/ScrapeMenuView.hpp"
 #include "ui/ScrapeProgressView.hpp"
 #include "romm/RomMService.hpp"
+#include "ui/SaveSyncPickView.hpp"
 #include "ui/ScreensaverView.hpp"
 #include "ui/SystemsTab.hpp"
 #include "ui/ThemeManager.hpp"
@@ -1115,6 +1116,10 @@ void GameListView::openOptionsMenu()
             if (action == GameOptionsAction::Download) {
                 // Multi-file sets get the disc picker; single-file rows download directly.
                 showDiscPicker(game, false);
+                return;
+            }
+            if (action == GameOptionsAction::SyncSaveFiles) {
+                SaveSyncPickView::presentForGame(favSystemId, game);
                 return;
             }
             if (game.fromRomM && game.path.empty() &&

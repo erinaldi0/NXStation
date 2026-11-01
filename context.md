@@ -294,7 +294,7 @@ Do **not** call full `onGameFocused()` on every repeat step — video decode + p
 `RomMClient::negotiate` posts `/api/sync/negotiate` with `device_id` at the **top level** plus `device_name`, `sync_enabled` and the per-save list. RomM answers `400` when `device_id` is missing (or when the token is not device-bound and no device is registered) and `400 "Sync is disabled for this device"` when `sync_enabled` is false; missing fields are `422`. The response is `session_id` + `operations[]` (`upload`/`download`/`conflict`/`delete`/`no_op`), not the old `uploads`/`downloads`/`conflicts`/`deletes` arrays; `RomMSyncEngine` dispatches per `action`.
 
 - The save entry schema is `rom_id` (integer), `file_name`, `slot`, `emulator`, `content_hash`, `updated_at` (required, UTC ISO — from `DirEntry::modifiedTime`), `file_size_bytes`.
-- `rom_ids` is the read-only ROM scope. RomM offers downloads for the whole save library when it is omitted, so the engine sends the ROM it is negotiating for (`RomMSyncEngine::negotiate` passes `{ctx.rommRomId}`); an operation whose `rom_id` is a different ROM is skipped, not applied.
+- `rom_ids` is the read-only ROM scope. RomM offers downloads for the whole save library when it is omitted, so the engine sends the ROMs it is negotiating for (`RomMSyncEngine::negotiateFor` passes the prepared mappings, capped at 500 ids per request); an operation whose `rom_id` is a different ROM is skipped, not applied.
 - Sync covers the ROMs that exist on this device: `syncAll` filters mappings by `FileSystem::exists(romPath)`, so a game whose saves the server knows but that was never downloaded here is skipped and counted in the summary, and `runSyncForRom` refuses a remote row.
 - `resolveLocalPath` only matches a file that already exists, so it cannot serve a download; `downloadTargetPath` builds the destination instead (save/state root + the server's `file_name`, creating the folder when missing).
 - `device_id` lives on the client (`RomMClient::setDeviceId`), not per save. It comes from pairing and is persisted in `data/romm_state.json`; settings.json does not carry it, so `initialize()`/`refreshConfig()` restore it from the state store, and `ensureAuthenticated()` registers a device (`POST /api/devices`) when the token is not device-bound. Sync refuses early when it is still empty.
@@ -303,6 +303,17 @@ Do **not** call full `onGameFocused()` on every repeat step — video decode + p
 - Sessions close with `POST /api/sync/sessions/{id}/complete` (`operations_completed`/`operations_failed`); it answers `400` if the session is already completed.
 - `content_hash`: RomM uses md5 for plain files, so `sf::Hash::md5File` matches. For archives it hashes md5 over `name:entrymd5` sorted by name joined by newlines, so zip saves skip hash verification (`RomMSyncEngine::looksLikeZipArchive`).
 - `checkResponse` surfaces FastAPI's `{"detail": ...}` body, which is what makes a `400` self-reporting in `NXStation.log`.
+
+### Save sync file picker
+
+The engine is split into **prepare** and **apply** so a picker can sit between them (`source/romm/RomMSyncEngine.cpp`):
+
+- `prepareCandidates` (one ROM) / `prepareCandidatesAll` (every downloaded mapping) run the scan + negotiate with **no side effects** and return `SyncCandidate` rows (`include/romm/RomMSyncCandidate.hpp`). `syncForRom` / `syncAll` are now prepare → select-all → apply wrappers, so the automatic launch/return flows behave exactly as before.
+- `applyCandidates` runs **only the selected** candidates; each row is self-contained (identity, both sides, resolved path), so a selection alone is enough to run it. Fingerprints and conflict backups are recorded only for applied files. Rows whose local file vanished between prepare and apply are skipped with a warning — the picker flow can span minutes between selection and apply.
+- `buildCandidates` is pure (no I/O, no borealis): the scan entries, the operations, the path resolver, the device-name lookup and the policy seed are all passed in — that is what `tests/romm_sync_candidates_test.cpp` exercises (host test target in CMake; needs `${CURL_INCLUDE_DIRS}` because the header chain reaches `curl/curl.h`).
+- Each candidate carries a per-file `Resolution` seeded from the global policy; `ConflictPolicy::Ask` seeds `Acknowledge` (acknowledge, change neither side), which is what the no-picker auto flow does. The picker implements Ask per row: conflict rows cycle Keep both / Keep local / Keep remote; delete rows support Keep both (archive local + drop fingerprint) and Keep local (don't touch the file).
+- Device identity: the negotiate parse keeps the server's `device_id` for download/conflict rows (upload and delete rows have no server row, so they stay attributed to this device). `RomMClient::fetchDevices()` (`GET /api/devices`) fills a persisted `device_names` cache in `RomMStateStore` so rows show names offline after the first fetch; fallback is the short id, or the config device name for rows owned by this device.
+- UI: `SaveSyncPickView` (`source/ui/SaveSyncPickView.cpp`), grouped **game → saves/states → slot → device row**; **A** toggles selection, **X** cycles the row's resolution, footer has Select all / Select none / Apply. Selection is per session, not persisted — a deselected file never reaches the server, so the next negotiation proposes it again; an empty selection does nothing (no session churn). Entry points: Settings → RomM Sync → **Choose Files to Sync** (all mapped, downloaded ROMs) and the game Y menu → **Sync Save Files** (scoped to that game, RomM games only). Apply results color the rows per file.
 
 ## Key source files
 
@@ -329,6 +340,7 @@ Do **not** call full `onGameFocused()` on every repeat step — video decode + p
 | Theme | `source/ui/Theme.cpp` |
 | Cloud sync / restore | `source/cloud/CloudSaveService.cpp`, `CloudRestorePickView.cpp`, `CloudRestoreProgressView.cpp` |
 | RomM sync | `source/romm/RomMClient.cpp`, `RomMSyncEngine.cpp`, `RomMSaveMapper.cpp`, `RomMStateStore.cpp`, `RomMService.cpp` |
+| RomM file picker | `source/romm/RomMSyncCandidate.cpp`, `source/ui/SaveSyncPickView.cpp`, `tests/romm_sync_candidates_test.cpp` |
 
 ## Logging
 

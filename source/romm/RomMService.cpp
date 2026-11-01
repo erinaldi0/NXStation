@@ -262,6 +262,81 @@ void RomMService::syncForRomAsync(const std::string& romPath, const std::string&
     });
 }
 
+void RomMService::prepareCandidatesAsync(
+    const std::string& romPath, const std::string& systemId, const std::string& coreId,
+    std::function<void(bool, std::vector<SyncCandidate>, const std::string&)> done) {
+    refreshConfig();
+    if (!enabled_) {
+        if (done) done(false, {}, "RomM sync not enabled");
+        return;
+    }
+
+    std::string error;
+    if (!ensureAuthenticated(error)) {
+        if (done) done(false, {}, "Auth error: " + error);
+        return;
+    }
+
+    AppState::instance().pool().enqueue(
+        [this, romPath, systemId, coreId, done = std::move(done)]() mutable {
+            std::string error;
+            std::vector<SyncCandidate> candidates;
+            if (romPath.empty())
+                candidates = syncEngine_->prepareCandidatesAll(error);
+            else
+                candidates = syncEngine_->prepareCandidates(romPath, systemId, coreId, error);
+
+            const bool ok = error.empty();
+            if (done) {
+                brls::sync([done = std::move(done), ok, candidates = std::move(candidates), error]() mutable {
+                    done(ok, candidates, error);
+                });
+            }
+        });
+}
+
+void RomMService::prepareAllCandidatesAsync(
+    std::function<void(bool, std::vector<SyncCandidate>, const std::string&)> done) {
+    prepareCandidatesAsync("", "", "", std::move(done));
+}
+
+void RomMService::applyCandidatesAsync(std::vector<SyncCandidate> candidates,
+                                       std::function<void(const std::string&, int)> progress,
+                                       std::atomic<bool>* abort,
+                                       std::function<void(bool, const std::string&, std::vector<SyncCandidate>)> done) {
+    refreshConfig();
+    if (!enabled_) {
+        if (done) done(false, "RomM sync not enabled", candidates);
+        return;
+    }
+
+    std::string error;
+    if (!ensureAuthenticated(error)) {
+        if (done) done(false, "Auth error: " + error, candidates);
+        return;
+    }
+
+    AppState::instance().pool().enqueue(
+        [this, candidates = std::move(candidates), progress, abort, done = std::move(done)]() mutable {
+            auto detailed = [progress](const SyncDetailedProgress& p) {
+                if (!progress) return;
+                brls::sync([progress, message = p.message, percent = p.percent]() {
+                    progress(message, percent);
+                });
+            };
+
+            bool result = syncEngine_->applyCandidates(candidates, detailed, abort);
+            std::string message = syncEngine_->lastResult();
+            lastSyncResult_ = message;
+
+            if (done) {
+                brls::sync([done = std::move(done), result, candidates = std::move(candidates), message]() mutable {
+                    done(result, message, candidates);
+                });
+            }
+        });
+}
+
 bool RomMService::wasRecentlySynced(const std::string& romPath) const {
     std::lock_guard<std::mutex> lock(syncMutex_);
     return lastSyncedPath_ == romPath && lastSyncedAt_ > 0 &&

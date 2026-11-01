@@ -54,6 +54,22 @@ public:
     void syncForRomAsync(const std::string& romPath, const std::string& systemId, const std::string& coreId,
                          std::function<void(bool, const std::string&)> done);
 
+    /**
+     * File-level sync for the picker. Prepare runs the scan + negotiate with no side effects;
+     * apply runs only the candidates the user selected. Both run on the pool, and the done
+     * callbacks run on the main thread. Apply writes each candidate's result back so the picker
+     * can color its row.
+     */
+    void prepareCandidatesAsync(const std::string& romPath, const std::string& systemId,
+                                const std::string& coreId,
+                                std::function<void(bool, std::vector<SyncCandidate>, const std::string&)> done);
+    void prepareAllCandidatesAsync(
+        std::function<void(bool, std::vector<SyncCandidate>, const std::string&)> done);
+    void applyCandidatesAsync(std::vector<SyncCandidate> candidates,
+                              std::function<void(const std::string&, int)> progress,
+                              std::atomic<bool>* abort,
+                              std::function<void(bool, const std::string&, std::vector<SyncCandidate>)> done);
+
     /** True when this exact ROM was synced by this process very recently (avoids duplicate sync). */
     bool wasRecentlySynced(const std::string& romPath) const;
 
