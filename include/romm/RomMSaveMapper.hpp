@@ -67,6 +67,13 @@ public:
     /** Resolve local save path from RomM save metadata. */
     std::optional<std::string> resolveLocalPath(const RomMSave& save) const;
 
+    /**
+     * Where a downloaded save belongs. resolveLocalPath only matches files that already exist, and a
+     * download by definition has none yet, so this builds the destination from the mapping plus the
+     * name the server stores, creating the save/state folder when it is not there.
+     */
+    std::optional<std::string> downloadTargetPath(const RomMSave& save) const;
+
     /** Compute hash of a file. */
     static std::string computeHash(const std::string& path);
 

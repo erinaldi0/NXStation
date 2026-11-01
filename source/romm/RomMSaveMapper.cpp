@@ -297,6 +297,30 @@ std::optional<std::string> RomMSaveMapper::resolveLocalPath(const RomMSave& save
     return std::nullopt;
 }
 
+std::optional<std::string> RomMSaveMapper::downloadTargetPath(const RomMSave& save) const {
+    // A save that is already on disk keeps its own path; only a new one needs a destination built.
+    if (auto existing = resolveLocalPath(save))
+        return existing;
+
+    const auto mapping = getMappingByRomMId(save.romId);
+    if (!mapping) return std::nullopt;
+
+    const bool state = save.type == "state" || isStateFile(save.fileName);
+    const auto roots = sf::cloud::discoverRetroArchSaveRoots();
+    std::string dir = state ? roots.statesDir : roots.savesDir;
+    if (dir.empty())
+        dir = FileSystem::parentPath(mapping->romPath);
+    if (dir.empty()) return std::nullopt;
+
+    if (!FileSystem::exists(dir) && !FileSystem::createDirectories(dir))
+        return std::nullopt;
+
+    const std::string name = save.fileName.empty()
+        ? mapping->displayName + "." + (save.slot.empty() ? "0" : save.slot)
+        : save.fileName;
+    return FileSystem::join(dir, name);
+}
+
 std::string RomMSaveMapper::computeHash(const std::string& path) {
     return sf::Hash::md5File(path);
 }

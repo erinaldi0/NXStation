@@ -165,7 +165,13 @@ public:
     void setDeviceId(const std::string& deviceId) { deviceId_ = deviceId; }
 
     // Save Sync Protocol
-    bool negotiate(const std::vector<RomMSave>& localSaves, NegotiateResponse& out);
+    /**
+     * rom_ids scopes the negotiation to the ROMs this device holds. RomM offers downloads for the
+     * whole save library when no scope is given, so a client that carries part of the library has
+     * to send the scope; at most 500 ids per request.
+     */
+    bool negotiate(const std::vector<RomMSave>& localSaves, NegotiateResponse& out,
+                   const std::vector<std::string>& romIds = {});
     bool uploadSave(const std::string& localPath, const RomMSave& meta, UploadResponse& out);
     bool downloadSave(const std::string& saveId, const std::string& localPath,
                       const std::string& sessionId = "");

@@ -435,7 +435,8 @@ bool RomMClient::updateDevice(const std::string& deviceId, const std::string& na
     return true;
 }
 
-bool RomMClient::negotiate(const std::vector<RomMSave>& localSaves, NegotiateResponse& out) {
+bool RomMClient::negotiate(const std::vector<RomMSave>& localSaves, NegotiateResponse& out,
+                           const std::vector<std::string>& romIds) {
     if (!ready_) {
         lastError_ = "Client not authenticated";
         return false;
@@ -465,6 +466,18 @@ bool RomMClient::negotiate(const std::vector<RomMSave>& localSaves, NegotiateRes
         savesArray.push_back(std::move(s));
     }
     body["saves"] = std::move(savesArray);
+
+    // The read-only ROM scope. Without it RomM offers downloads for every save in the user's
+    // library, so a negotiation for one game comes back with saves belonging to games this device
+    // does not have, and the engine has no local folder to put them in.
+    if (!romIds.empty()) {
+        Json ids = Json::array();
+        for (const auto& id : romIds) {
+            const long long value = idFromString(id);
+            if (value > 0) ids.push_back(value);
+        }
+        if (ids.size() > 0) body["rom_ids"] = std::move(ids);
+    }
 
     const sf::cloud::CurlResponse resp = curl_.postJson(buildUrl("/sync/negotiate"), body.dump());
     if (!checkResponse(resp, "Sync negotiate")) return false;

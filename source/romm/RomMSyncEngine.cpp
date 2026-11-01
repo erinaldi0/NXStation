@@ -66,12 +66,29 @@ bool RomMSyncEngine::syncAll(SyncDetailedCallback progress, std::atomic<bool>* a
         return true;
     }
 
+    // Only the ROMs that are on this device. A mapping for a game that was never downloaded has no
+    // local folder, so a save for it has nowhere to go — that was the "Cannot resolve local path"
+    // warning repeating once per ROM.
+    std::vector<RomMapping> localMappings;
+    localMappings.reserve(mappings.size());
+    for (const auto& mapping : mappings) {
+        if (FileSystem::exists(mapping.romPath))
+            localMappings.push_back(mapping);
+    }
+
+    const size_t skipped = mappings.size() - localMappings.size();
+    if (localMappings.empty()) {
+        syncInProgress_.store(false);
+        lastResult_ = "Nothing to sync yet — download a ROM from the RomM library first";
+        return true;
+    }
+
     size_t synced = 0;
     size_t failed = 0;
-    const size_t total = mappings.size();
+    const size_t total = localMappings.size();
     size_t completed = 0;
 
-    for (const auto& mapping : mappings) {
+    for (const auto& mapping : localMappings) {
         if (abort && abort->load()) break;
 
         SyncContext ctx;
@@ -103,6 +120,8 @@ bool RomMSyncEngine::syncAll(SyncDetailedCallback progress, std::atomic<bool>* a
         lastResult_ = "Synced " + std::to_string(synced) + " of " + std::to_string(total) + " ROMs";
         if (failed > 0)
             lastResult_ += " (" + std::to_string(failed) + " failed)";
+        if (skipped > 0)
+            lastResult_ += " (" + std::to_string(skipped) + " skipped, not downloaded)";
     }
 
     store_.setLastSyncResult(lastResult_);
@@ -124,6 +143,13 @@ bool RomMSyncEngine::runSyncForRom(SyncContext& ctx) {
         return false;
     }
     ctx.rommRomId = mappingOpt->rommRomId;
+
+    // A remote row has a mapping but no file on this device, so its saves have nowhere to go.
+    if (!FileSystem::exists(ctx.romPath)) {
+        lastResult_ = "ROM is not downloaded locally: " + FileSystem::filenameOf(ctx.romPath);
+        emitProgress(ctx, SyncDetailedProgress::Stage::Error, lastResult_);
+        return false;
+    }
 
     // RomM identifies the caller by device_id — negotiate takes it at the top level of the payload
     // and the save endpoints as a query parameter. Without it the server answers 400 for every ROM,
@@ -154,6 +180,15 @@ bool RomMSyncEngine::runSyncForRom(SyncContext& ctx) {
         if (ctx.abort && ctx.abort->load()) break;
 
         if (op.action == "no_op") {
+            ++processed;
+            continue;
+        }
+
+        // The negotiation was scoped to this ROM, so anything else belongs to a game this device
+        // does not have. Skip it instead of writing another game's save into this game's folder.
+        if (op.romId != ctx.rommRomId) {
+            SF_LOG_W("RomM", "Skipping %s: save belongs to ROM %s, not %s",
+                     op.fileName.c_str(), op.romId.c_str(), ctx.rommRomId.c_str());
             ++processed;
             continue;
         }
@@ -265,7 +300,9 @@ bool RomMSyncEngine::collectLocalFiles(SyncContext& ctx) {
 bool RomMSyncEngine::negotiate(SyncContext& ctx) {
     if (ctx.abort && ctx.abort->load()) return false;
 
-    if (!client_.negotiate(ctx.localSaves, ctx.negotiateResp)) {
+    // The scope is this ROM alone. Without it RomM answers with the device's whole save library,
+    // and a save for a game that is not on this device has no local folder to be written to.
+    if (!client_.negotiate(ctx.localSaves, ctx.negotiateResp, {ctx.rommRomId})) {
         lastResult_ = "Negotiation failed: " + client_.lastError();
         emitProgress(ctx, SyncDetailedProgress::Stage::Error, lastResult_);
         return false;
@@ -279,7 +316,8 @@ bool RomMSyncEngine::negotiate(SyncContext& ctx) {
 }
 
 bool RomMSyncEngine::performDownload(SyncContext& ctx, const RomMSave& op) {
-    auto localPathOpt = mapper_.resolveLocalPath(op);
+    // A download has no local file yet, so the destination has to be built rather than matched.
+    auto localPathOpt = mapper_.downloadTargetPath(op);
     if (!localPathOpt) {
         SF_LOG_W("RomM", "Cannot resolve local path for %s", op.fileName.c_str());
         return false;
