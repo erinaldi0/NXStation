@@ -135,6 +135,8 @@ size_t gameIndexForPath(const std::string& systemId, const std::string& romPath,
 {
     const auto& games = AppState::instance().gamesFor(systemId);
     for (size_t i = 0; i < games.size(); ++i) {
+        if (!GameListView::matchesFilter(games[i]))
+            continue;
         // The id wins first: a remote row has an empty path, so path matching alone returns
         // the first remote row of the system for every remote card.
         if ((!romId.empty() && games[i].rommRomId == romId) ||
@@ -142,6 +144,15 @@ size_t gameIndexForPath(const std::string& systemId, const std::string& romPath,
             return i;
     }
     return 0;
+}
+
+/* The dashboard shows the same slice of the library as the game lists, so every game source here
+ * goes through the filter that ZL/ZR change. */
+std::vector<GameItem> filteredGames(const std::string& systemId)
+{
+    std::vector<GameItem> games = AppState::instance().gamesFor(systemId);
+    std::erase_if(games, [](const GameItem& game) { return !GameListView::matchesFilter(game); });
+    return games;
 }
 
 std::string releaseYear(const std::string& date)
@@ -395,6 +406,26 @@ void DashboardHomeView::registerActions()
         });
         return true;
     });
+
+    // ZL/ZR walk the same session-wide library filter the game lists use, so the dashboard
+    // and the lists never show two different slices of the library.
+    auto applyFilter = [this](bool backwards) {
+        if (browser::overlayBlocksHostInput())
+            return true;
+        GameListView::cycleFilter(backwards);
+        playNavSfx();
+        brls::sync([this]() {
+            rebuild();
+            if (firstFocusable_)
+                brls::Application::giveFocus(firstFocusable_);
+        });
+        return true;
+    };
+
+    registerAction("Filter", brls::ControllerButton::BUTTON_RT,
+                   [applyFilter](brls::View*) { return applyFilter(false); });
+    registerAction("Filter", brls::ControllerButton::BUTTON_LT,
+                   [applyFilter](brls::View*) { return applyFilter(true); });
 }
 
 void DashboardHomeView::willAppear(bool resetState)
@@ -427,7 +458,7 @@ void DashboardHomeView::onCellFocused(DashboardCell* cell)
         // Which game the Focus block shows for a platform tile is a theme behavior:
         // tile_focus_pick = "random" (default, a game picked inside that platform) or
         // "first" (the top of its list).
-        const auto& games = AppState::instance().gamesFor(cell->systemId());
+        const auto games = filteredGames(cell->systemId());
         if (games.empty()) {
             updateHero(nullptr);
             return;
@@ -438,7 +469,7 @@ void DashboardHomeView::onCellFocused(DashboardCell* cell)
         else
             updateHero(pickRandomGame(cell->systemId()));
     } else {
-        const auto& games = AppState::instance().gamesFor(cell->systemId());
+        const auto games = filteredGames(cell->systemId());
         const GameItem* game = nullptr;
         for (const auto& item : games) {
             // Id first, then path: a remote card has no path, and comparing empty paths made
@@ -456,7 +487,7 @@ void DashboardHomeView::onCellFocused(DashboardCell* cell)
 
 void DashboardHomeView::openCell(DashboardCell* cell)
 {
-    if (cell->isSystemCell() && AppState::instance().gamesFor(cell->systemId()).empty())
+    if (cell->isSystemCell() && filteredGames(cell->systemId()).empty())
         return;
 
     playConfirmSfx();
@@ -746,10 +777,11 @@ void DashboardHomeView::buildTopBar()
 
     size_t total = 0;
     for (const auto& sys : Config::instance().systems())
-        total += AppState::instance().gamesFor(sys.id).size();
+        total += filteredGames(sys.id).size();
 
     auto* count = new brls::Label();
-    count->setText(std::to_string(total) + (total == 1 ? " game" : " games"));
+    count->setText(std::to_string(total) + (total == 1 ? " game" : " games") +
+                   GameListView::filterSuffix());
     count->setFontSize(tokenChain("count_font", "font_body", 17.f));
     count->setTextColor(theme.color("nxstation/count_text"));
     count->setSingleLine(true);
@@ -788,7 +820,7 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
 
     // Default to the most recently played game (from the lastPlayed virtual system).
     // When a platform tile or game card gains focus, onCellFocused will update the hero.
-    const auto& recentGames = AppState::instance().gamesFor(kLastPlayedSystemId);
+    const auto recentGames = filteredGames(kLastPlayedSystemId);
     const GameItem heroSeed = recentGames.empty() ? GameItem{} : recentGames.front();
 
     auto* card = new DashboardCell(this, heroSeed.systemId, heroSeed.path, heroSeed.path.empty());
@@ -942,17 +974,22 @@ brls::Box* DashboardHomeView::buildGamesSection(const std::string& headerTitle,
 
 const GameItem* DashboardHomeView::pickRandomGame(const std::string& systemId)
 {
+    // Indexes into the store's vector, so the pointer the caller gets stays valid.
     const auto& games = AppState::instance().gamesFor(systemId);
-    if (games.empty())
+    std::vector<size_t> matching;
+    for (size_t i = 0; i < games.size(); ++i)
+        if (GameListView::matchesFilter(games[i]))
+            matching.push_back(i);
+    if (matching.empty())
         return nullptr;
-    return &games[std::uniform_int_distribution<size_t>(0, games.size() - 1)(rng_)];
+    return &games[matching[std::uniform_int_distribution<size_t>(0, matching.size() - 1)(rng_)]];
 }
 
 std::vector<GameItem> DashboardHomeView::randomGames(size_t count)
 {
     std::vector<GameItem> pool;
     for (const auto& sys : Config::instance().systems()) {
-        const auto& games = AppState::instance().gamesFor(sys.id);
+        const auto games = filteredGames(sys.id);
         pool.insert(pool.end(), games.begin(), games.end());
     }
     if (pool.empty())
@@ -1024,10 +1061,10 @@ brls::Box* DashboardHomeView::buildRandomSection()
 
 brls::Box* DashboardHomeView::buildPlatformsSection()
 {
-    // Only the platforms with at least one game in them.
+    // Only the platforms with at least one game in them, honouring the ZL/ZR filter.
     std::vector<std::string> platforms;
     for (const auto& sys : Config::instance().systems()) {
-        if (AppState::instance().gamesFor(sys.id).empty())
+        if (filteredGames(sys.id).empty())
             continue;
         platforms.push_back(sys.id);
     }
@@ -1261,11 +1298,9 @@ void DashboardHomeView::rebuild()
         else if (section == "random")
             view = buildRandomSection();
         else if (section == "continue")
-            view = buildGamesSection("Continue playing",
-                                     AppState::instance().gamesFor(kLastPlayedSystemId));
+            view = buildGamesSection("Continue playing", filteredGames(kLastPlayedSystemId));
         else if (section == "favourites")
-            view = buildGamesSection("Favourites",
-                                     AppState::instance().gamesFor(kFavoritesSystemId));
+            view = buildGamesSection("Favourites", filteredGames(kFavoritesSystemId));
         // Unknown section names are ignored by design (forward-compatible theme keys).
 
         if (view)
@@ -1288,7 +1323,7 @@ void DashboardHomeView::rebuild()
 
     auto& theme = ThemeManager::instance();
     auto* hints = new brls::Label();
-    hints->setText("↑ ↓ Sections   ·   ← → Cards/Tiles   ·   A Open   ·   Y Menu   ·   - Screensaver   ·   + Settings");
+    hints->setText("↑ ↓ Sections   ·   ← → Cards/Tiles   ·   A Open   ·   Y Menu   ·   - Screensaver   ·   + Settings   ·   ZL/ZR Filter");
     hints->setFontSize(tokenChain("hint_font", "font_meta", 14.f));
     hints->setTextColor(theme.color("nxstation/hint_text"));
     hints->setSingleLine(true);

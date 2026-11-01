@@ -14,6 +14,14 @@ namespace sf::ui {
 
 class VideoPreviewView;
 
+/** Quick library filter, changed with ZL (previous) and ZR (next). Session-wide so every system
+ *  list shows the same slice of the library: everything, local files only, or cloud rows only. */
+enum class LibraryFilter {
+    All,
+    Downloaded,
+    CloudOnly,
+};
+
 class GameListView : public brls::Box {
 public:
     explicit GameListView(std::string systemId, size_t initialFocus = 0);
@@ -26,6 +34,17 @@ public:
     void willAppear(bool resetState = false) override;
     void willDisappear(bool resetState = false) override;
     void frame(brls::FrameContext* ctx) override;
+
+    static LibraryFilter filter() { return filter_; }
+
+    /** ZR steps forward, ZL steps back through the session filter; returns the new one. */
+    static LibraryFilter cycleFilter(bool backwards);
+
+    /** A row is in the filtered library when it passes the active filter. */
+    static bool matchesFilter(const sf::GameItem& game);
+
+    /** " · Downloaded" for the labels that show the active filter. */
+    static std::string filterSuffix();
 
     // Internal — used by the row data source, not part of the public API.
     size_t rowCount() const { return games_.size(); }
@@ -46,6 +65,8 @@ private:
     void rebuildList();
     void refreshFromStore();
     void syncGamesFromStore();
+    void changeFilter(bool backwards);
+    void applyFilter(std::vector<sf::GameItem>& games) const;
     void requestArtwork(size_t index);
     void openOptionsMenu();
     void openScrapeMenu();
@@ -88,6 +109,9 @@ private:
     void confirmDeleteFocusedGame();
     void deleteGame(const sf::GameItem& game);
 
+    /** Shared by every game list for the session, since ZL/ZR filter "the library". */
+    static LibraryFilter filter_;
+
     std::string systemId_;
     std::vector<sf::GameItem> games_;
     size_t initialFocus_ = 0;
@@ -95,6 +119,8 @@ private:
     /** Row the focus stack must re-select after an activity pop (the recorded cell gets recycled). */
     size_t restoreFocusIndex_ = static_cast<size_t>(-1);
     bool customList_ = false;
+    /** Search results are a snapshot, so the unfiltered set is kept here and games_ is the filtered view. */
+    std::vector<sf::GameItem> customGames_;
     std::string customTitle_;
     std::string customSubtitle_;
 

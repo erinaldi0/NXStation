@@ -50,6 +50,8 @@
 
 namespace sf::ui {
 
+LibraryFilter GameListView::filter_ = LibraryFilter::All;
+
 namespace {
 
 std::string systemLabelFor(const std::string& systemId)
@@ -64,6 +66,18 @@ std::string systemLabelFor(const std::string& systemId)
 constexpr float kRowHeight = 64.f;
 constexpr const char* kRowReuseId = "GameRow";
 constexpr const char* kEmptyHeaderReuseId = "EmptyHeader";
+
+constexpr const char* filterName(LibraryFilter filter)
+{
+    switch (filter) {
+        case LibraryFilter::Downloaded:
+            return "Downloaded";
+        case LibraryFilter::CloudOnly:
+            return "Cloud";
+        default:
+            return "All";
+    }
+}
 
 // Description auto-scroll: dwell at each end, then creep down at a readable pace.
 constexpr float kDescriptionHoldTopSeconds = 2.5f;
@@ -345,6 +359,7 @@ GameListView::GameListView(std::string title, std::vector<sf::GameItem> games,
                            std::string subtitle)
     : games_(std::move(games))
     , customList_(true)
+    , customGames_(games_)
     , customTitle_(std::move(title))
     , customSubtitle_(std::move(subtitle))
 {
@@ -361,7 +376,7 @@ GameListView::GameListView(std::string title, std::vector<sf::GameItem> games,
     detailLabel->setLineHeight(1.35f);
     detailLabel->setSingleLine(false);
     detailScroller->setScrollingIndicatorVisible(false);
-    hintsLabel->setText("A Launch   ·   X Star   ·   Y Menu   ·   - Screensaver   ·   R₃ Random   ·   L/R Page");
+    hintsLabel->setText("A Launch   ·   X Star   ·   Y Menu   ·   - Screensaver   ·   R₃ Random   ·   L/R Page   ·   ZL/ZR Filter");
     applyThemeColors();
 
     setupGameListScroller(scroller, this);
@@ -385,7 +400,7 @@ GameListView::GameListView(std::string systemId, size_t initialFocus)
         titleLabel->setText(sys ? sys->name : systemId_);
 
     if (systemId_ == kRomMSystemId)
-        hintsLabel->setText("A Download & Play   ·   X Star   ·   Y Menu   ·   L/R Page");
+        hintsLabel->setText("A Download & Play   ·   X Star   ·   Y Menu   ·   L/R Page   ·   ZL/ZR Filter");
 
     boxArt->setScalingType(brls::ImageScalingType::FIT);
     boxArt->setImageAlign(brls::ImageAlignment::CENTER);
@@ -447,6 +462,25 @@ void GameListView::registerListActions()
             return true;
         playNavSfx();
         jumpToRandomGame();
+        return true;
+    });
+
+    // ZL/ZR walk the session-wide library filter: All -> Downloaded -> Cloud.
+    this->registerAction(
+        "Filter", brls::ControllerButton::BUTTON_RT, [this, alive](brls::View*) {
+        if (!*alive || overlayBlocking_)
+            return true;
+        playNavSfx();
+        changeFilter(false);
+        return true;
+    });
+
+    this->registerAction(
+        "Filter", brls::ControllerButton::BUTTON_LT, [this, alive](brls::View*) {
+        if (!*alive || overlayBlocking_)
+            return true;
+        playNavSfx();
+        changeFilter(true);
         return true;
     });
 }
@@ -738,9 +772,18 @@ void GameListView::refreshFromStore()
                                  return Utf8::compareTitles(a.displayName, b.displayName);
                              });
         }
-        countLabel->setText(std::to_string(games_.size()) + " titles");
+        applyFilter(games_);
+
+        if (filter_ != LibraryFilter::All && games_.empty())
+            countLabel->setText(std::string(filterName(filter_)) + " — nothing in this system");
+        else
+            countLabel->setText(std::to_string(games_.size()) + " titles" + filterSuffix());
     } else {
-        countLabel->setText(customSubtitle_);
+        // Rebuild the view from the unfiltered snapshot, otherwise stepping the filter back to
+        // All could not recover rows that an earlier filter had removed.
+        games_ = customGames_;
+        applyFilter(games_);
+        countLabel->setText(customSubtitle_ + filterSuffix());
     }
 
     size_t keepFocus = focusedIndex_;
@@ -777,6 +820,81 @@ void GameListView::syncGamesFromStore()
                              return Utf8::compareTitles(a.displayName, b.displayName);
                          });
     }
+    applyFilter(games_);
+}
+
+LibraryFilter GameListView::cycleFilter(bool backwards)
+{
+    constexpr size_t kFilterCount = 3;
+    filter_ = static_cast<LibraryFilter>(
+        (static_cast<size_t>(filter_) + (backwards ? kFilterCount - 1 : 1)) % kFilterCount);
+    return filter_;
+}
+
+bool GameListView::matchesFilter(const sf::GameItem& game)
+{
+    switch (filter_) {
+        case LibraryFilter::Downloaded:
+            return !game.path.empty();
+        case LibraryFilter::CloudOnly:
+            return game.path.empty();
+        default:
+            return true;
+    }
+}
+
+void GameListView::applyFilter(std::vector<sf::GameItem>& games) const
+{
+    if (filter_ == LibraryFilter::All)
+        return;
+    std::erase_if(games, [](const sf::GameItem& game) { return !matchesFilter(game); });
+}
+
+std::string GameListView::filterSuffix()
+{
+    if (filter_ == LibraryFilter::All)
+        return {};
+    return std::string(" · ") + filterName(filter_);
+}
+
+void GameListView::changeFilter(bool backwards)
+{
+    cycleFilter(backwards);
+
+    // Keep the game that was focused when it survives the new filter; otherwise land on the row
+    // where it would still sit in the A–Z order instead of on an arbitrary title.
+    std::string keepId;
+    std::string keepTitle;
+    if (focusedIndex_ < games_.size()) {
+        keepId = games_[focusedIndex_].rommRomId;
+        keepTitle = games_[focusedIndex_].displayName;
+    }
+
+    refreshFromStore();
+
+    if (games_.empty())
+        return;
+
+    size_t target = games_.size();
+    for (size_t i = 0; i < games_.size(); ++i) {
+        if ((!keepId.empty() && games_[i].rommRomId == keepId) ||
+            (!keepTitle.empty() && games_[i].displayName == keepTitle)) {
+            target = i;
+            break;
+        }
+    }
+    if (target >= games_.size()) {
+        for (size_t i = 0; i < games_.size(); ++i) {
+            if (Utf8::compareTitles(games_[i].displayName, keepTitle)) {
+                target = i;
+                break;
+            }
+        }
+        if (target >= games_.size())
+            target = games_.size() - 1;
+    }
+
+    jumpToIndex(target, false);
 }
 
 void GameListView::rebuildList()
