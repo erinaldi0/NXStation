@@ -42,6 +42,8 @@
     <entry key="hero_desc_font" value="17"/>
     <entry key="hero_desc_height" value="90"/>
     <entry key="hero_desc_lines" value="4"/>
+    <entry key="hero_meta_gap" value="6"/>          <!-- title -> subtitle -->
+    <entry key="hero_desc_gap" value="12"/>         <!-- subtitle -> description -->
     <entry key="hero_fixed_height" value="250"/>  <!-- 0 = auto; card height = hero_fixed_height - 44 (header) -->
     <entry key="hero_badge_pad" value="10"/>
     <entry key="hero_badge_gap" value="8"/>

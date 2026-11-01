@@ -76,6 +76,7 @@
     <entry key="hero_badge_gap" value="8"/>
     <entry key="hero_badge_pad" value="10"/>
     <entry key="hero_desc_font" value="15"/>
+    <entry key="hero_desc_gap" value="12"/>
     <entry key="hero_desc_height" value="90"/>
     <entry key="hero_desc_lines" value="4"/>
     <entry key="hero_fixed_height" value="250"/>
@@ -86,6 +87,7 @@
     <entry key="hero_image_radius" value="8"/>
     <entry key="hero_image_width" value="140"/>
     <entry key="hero_meta_font" value="14"/>
+    <entry key="hero_meta_gap" value="6"/>
     <entry key="hero_size" value="180"/>
     <entry key="hero_text_width" value="860"/>
     <entry key="hero_tile_padding" value="4"/>

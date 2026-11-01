@@ -884,6 +884,7 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     heroMeta_->setSingleLine(true);
     heroMeta_->setAnimated(false);
     heroMeta_->setWidth(textWidth);
+    heroMeta_->setMarginTop(tokenChain("hero_meta_gap", "meta_row_gap", 6.f));
     middle->addView(heroMeta_);
 
     const int descLines = std::max(1, static_cast<int>(token("hero_desc_lines", 4.f)));
@@ -899,6 +900,7 @@ brls::Box* DashboardHomeView::buildHeroSection(float columnWidth)
     desc->setAnimated(false);
     if (ThemeManager::instance().hasStyle("hero_desc_height"))
         desc->setMinHeight(token("hero_desc_height", 90.f));
+    desc->setMarginTop(tokenChain("hero_desc_gap", "meta_row_gap", 12.f));
     heroDescription_ = desc;
     middle->addView(desc);
 
