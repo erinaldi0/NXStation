@@ -78,6 +78,13 @@ public:
      */
     bool entryHasSource(const LibraryEntry& entry, bool thumbnail) const;
 
+    /**
+     * True when the metadata RomM has for this entry already reached gamelist.xml. Without it an
+     * entry whose covers are on disk counts as complete forever, so an existing library never gets
+     * its year, genres, developer or summary — only the art arrives.
+     */
+    bool entryMetadataComplete(const LibraryEntry& entry) const;
+
 private:
     RomMClient& client_;
     const RomMConfig& config_;

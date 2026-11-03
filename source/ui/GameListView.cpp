@@ -40,6 +40,7 @@
 #include "util/Utf8.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <functional>
 #include <nanovg.h>
@@ -67,6 +68,25 @@ std::string systemLabelFor(const std::string& systemId)
 constexpr float kRowHeight = 64.f;
 constexpr const char* kRowReuseId = "GameRow";
 constexpr const char* kEmptyHeaderReuseId = "EmptyHeader";
+
+/** The four-digit year from a metadata date (`1992` or `1992-05-14`). */
+std::string releaseYearFrom(const std::string& date)
+{
+    if (date.size() >= 4 && std::isdigit(static_cast<unsigned char>(date[0])))
+        return date.substr(0, 4);
+    return {};
+}
+
+/** The first genre of a joined genre string. */
+std::string firstGenre(const std::string& genre)
+{
+    size_t pos = genre.find_first_of(",;");
+    std::string out = pos == std::string::npos ? genre : genre.substr(0, pos);
+    auto notSpace = [](unsigned char c) { return !std::isspace(c); };
+    out.erase(out.begin(), std::find_if(out.begin(), out.end(), notSpace));
+    out.erase(std::find_if(out.rbegin(), out.rend(), notSpace).base(), out.end());
+    return out;
+}
 
 constexpr const char* filterName(LibraryFilter filter)
 {
@@ -953,7 +973,24 @@ brls::RecyclerCell* GameListView::cellForRow(brls::RecyclerFrame* recycler, size
             detail += " · " + std::to_string(g.discCount) + " files";
     }
 
-    const bool showDetail = showSystem || systemId_ == kLastPlayedSystemId || cloudBadge;
+    // Metadata the row can carry: the release year and the first genre. A row in a normal system
+    // section used to show only the title, so the metadata RomM wrote for a downloaded ROM appeared
+    // only on the details page.
+    std::string metaInfo;
+    const std::string year = releaseYearFrom(g.meta.releaseDate);
+    if (!year.empty())
+        metaInfo = year;
+    const std::string genre = firstGenre(g.meta.genre);
+    if (!genre.empty())
+        metaInfo += metaInfo.empty() ? genre : " · " + genre;
+
+    if (!metaInfo.empty()) {
+        if (!detail.empty())
+            detail += " · ";
+        detail += metaInfo;
+    }
+
+    const bool showDetail = showSystem || systemId_ == kLastPlayedSystemId || cloudBadge || !detail.empty();
     cell->bind(this, title, detail, showDetail, color, cloudBadge);
     return cell;
 }

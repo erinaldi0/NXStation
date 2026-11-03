@@ -32,6 +32,12 @@ bool absoluteUrl(const std::string& url) {
     return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
 }
 
+/** The fields RomM can supply for an entry — the same set writeMetadata writes. */
+bool hasWritableMetadata(const LibraryEntry& entry) {
+    return !entry.rom.name.empty() || !entry.rom.summary.empty() || !entry.rom.genres.empty()
+        || !entry.rom.developer.empty() || !entry.rom.publisher.empty() || !entry.rom.releaseDate.empty();
+}
+
 } // namespace
 
 RomMArtFetcher::RomMArtFetcher(RomMClient& client, const RomMConfig& config)
@@ -87,6 +93,29 @@ bool RomMArtFetcher::entryHasSource(const LibraryEntry& entry, bool thumbnail) c
     return config_.artFallbackScraper && !entry.rom.coverUrl.empty();
 }
 
+bool RomMArtFetcher::entryMetadataComplete(const LibraryEntry& entry) const {
+    if (!hasWritableMetadata(entry))
+        return true;  // nothing writeMetadata could add
+
+    auto& cache = AppState::instance().metaCache();
+    const auto stored = cache.load(entry.matchedSystemId, stemFor(entry));
+    if (!stored)
+        return false;
+
+    // Completeness means the cache already carries a value for every field RomM has. Comparing for
+    // equality instead would re-queue an entry whose title or genre another source wrote later, and
+    // it would never settle.
+    auto covered = [](const std::string& have, const std::string& want) {
+        return want.empty() || !have.empty();
+    };
+    return covered(stored->title, entry.rom.name)
+        && covered(stored->description, entry.rom.summary)
+        && covered(stored->genre, entry.rom.genres)
+        && covered(stored->developer, entry.rom.developer)
+        && covered(stored->publisher, entry.rom.publisher)
+        && covered(stored->releaseDate, entry.rom.releaseDate);
+}
+
 bool RomMArtFetcher::entryArtComplete(const LibraryEntry& entry) const {
     if (!entryIsFetchable(entry))
         return true;
@@ -108,6 +137,9 @@ bool RomMArtFetcher::entryArtComplete(const LibraryEntry& entry) const {
     // entry incomplete.
     if (!entry.downloadedLocally)
         return true;
+
+    if (!entryMetadataComplete(entry))
+        return false;
 
     if (cfg.scrapeVideo() && AppState::instance().videoAllowed() && !entry.rom.videoPath.empty()
         && !present(cache.videoCachePath(entry.matchedSystemId, stem)))
@@ -276,8 +308,7 @@ bool RomMArtFetcher::fetchFileAsset(const std::string& label, const std::string&
 
 bool RomMArtFetcher::writeMetadata(const LibraryEntry& entry, const std::string& systemId,
                                    const std::string& stem) {
-    if (entry.rom.name.empty() && entry.rom.summary.empty() && entry.rom.genres.empty()
-        && entry.rom.developer.empty() && entry.rom.publisher.empty() && entry.rom.releaseDate.empty())
+    if (!hasWritableMetadata(entry))
         return false;
 
     auto& cache = AppState::instance().metaCache();
